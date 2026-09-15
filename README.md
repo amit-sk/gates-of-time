@@ -2,10 +2,29 @@ Undergraduate's project in micro-architectural attacks and weird gates.
 
 # Gates of Time
 
+## Table of contents
+
+- [Calibration](#calibration)
+  - [Compiling and Running](#compiling-and-running)
+- [Basic operations](#basic-operations)
+- [Testing Mispredictions](#testing-mispredictions)
+
 ## Calibration
 
 `calibrate_threshold.c` measures 10,000 cached and 10,000 flushed loads on x86
 to estimate `CACHE_HIT_THRESHOLD`.
+
+Set your run's constant in `consts.h`: `test` in `got.c` should return 1 when
+`elapsed < CACHE_HIT_THRESHOLD`, otherwise 0, using the same timing sequence as
+`measure`. Calibration covers warm L1 hits; validate LLC hits when testing gates.
+
+```bash
+cc -O2 -std=c11 calibrate_threshold.c -o calibrate_threshold.out
+taskset -c 0 ./calibrate_threshold.out
+```
+
+Pin calibration and gate experiments to the same available CPU. Recalibrate after
+changing the machine, CPU, or timing sequence.
 
 Example output from a run pinned to CPU 0:
 
@@ -25,20 +44,6 @@ With elapsed < threshold: cached errors=0.00%, flushed errors=0.00%
 
 If the percentile ranges overlap, the program uses the median midpoint; if the
 medians do not separate, it exits without a threshold.
-
-Set your run's constant in `consts.h`: `test` in `got.c` should return 1 when
-`elapsed < CACHE_HIT_THRESHOLD`, otherwise 0, using the same timing sequence as
-`measure`. Calibration covers warm L1 hits; validate LLC hits when testing gates.
-
-### Compiling and Running
-
-```bash
-cc -O2 -std=c11 calibrate_threshold.c -o calibrate_threshold.out
-taskset -c 0 ./calibrate_threshold.out
-```
-
-Pin calibration and gate experiments to the same available CPU. Recalibrate after
-changing the machine, CPU, or timing sequence.
 
 ## Basic operations
 
@@ -60,5 +65,23 @@ Cached: 100.00% success (5054/5054 correct)
 Uncached: 100.00% success (4946/4946 correct)
 ```
 
-Each percentage is correct responses divided by trials for that state. Counts
-and results vary between runs; use the same CPU as calibration.
+## Testing Mispredictions
+
+`task2.c` ramps up the CPU with `init()` and runs 10,000 trials each for `branch1`
+and `branch2`. Each trial trains twice with `zero`, flushes `one`, then calls with
+`one` and checks the output's cache state. `branch2` adds a 256-iteration loop to
+make recent branch history more consistent.
+
+```bash
+cc -O2 -std=gnu11 task2.c got.c -o task2.out
+taskset -c 0 ./task2.out
+```
+
+GNU C mode supports the supplied `asm` syntax. Use the same CPU as calibration.
+
+Example output (rates vary by machine and run):
+
+```text
+branch1: 0.01% mispredictions detected (1/10000 cached after inverse condition)
+branch2: 0.09% mispredictions detected (9/10000 cached after inverse condition)
+```
