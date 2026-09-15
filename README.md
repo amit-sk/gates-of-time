@@ -39,3 +39,26 @@ taskset -c 0 ./calibrate_threshold.out
 
 Pin calibration and gate experiments to the same available CPU. Recalibrate after
 changing the machine, CPU, or timing sequence.
+
+## Basic operations
+
+`got.c` implements `clear` (evict a line), `set` (cache a line without fences),
+and `test` (classify its cache state by load timing).
+
+`task1.c` calls `init()` to ramp up the CPU, then runs 10,000 trials, randomly
+choosing `set` or `clear` before checking the result with `test`.
+
+```bash
+cc -O2 -std=c11 task1.c got.c -o task1.out
+taskset -c 0 ./task1.out
+```
+
+The output reports success separately for cached and uncached trials:
+
+```text
+Cached: 100.00% success (5054/5054 correct)
+Uncached: 100.00% success (4946/4946 correct)
+```
+
+Each percentage is correct responses divided by trials for that state. Counts
+and results vary between runs; use the same CPU as calibration.

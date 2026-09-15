@@ -11,6 +11,7 @@
 
 #include "arch_primitives.h"
 #include "consts.h"
+#include "got.h"
 
 void clear(int *ptr)
 {
@@ -35,7 +36,7 @@ int test(int *ptr)
 }
 
 void init(void)
-{    
+{
     /* ramping up CPU */
     uint64_t start = read_clock();
     while (read_clock() - start < clock_ticks_per_second()) ;
