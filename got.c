@@ -35,6 +35,21 @@ int test(int *ptr)
     return (end - start) < CACHE_HIT_THRESHOLD;
 }
 
+void not(int *in, int *out)
+{
+    if (*(volatile int *)in == 0) {
+        return;
+    }
+
+    int *volatile address = out;
+    volatile int offset = 0;
+
+    for (int i = 0; i < MISPREDICTION_DELAY_STEPS; ++i)
+        address += offset;
+
+    set(address);
+}
+
 void init(void)
 {
     /* ramping up CPU */
