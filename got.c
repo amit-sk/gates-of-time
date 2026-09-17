@@ -52,7 +52,7 @@ void not(int *in, int *out)
     int *volatile address = out;
     volatile int offset = 0;
 
-    for (int i = 0; i < MISPREDICTION_DELAY_STEPS; ++i)
+    for (int i = 0; i < NOT_MISPREDICTION_DELAY_STEPS; ++i)
         address += offset;
 
     set(address);
@@ -79,7 +79,7 @@ void imul_not(int *in, int *out)
         ".endr\n\t"
         : [address] "+&r" (address)
         : [multiplier] "r" (multiplier),
-          [steps] "i" (MISPREDICTION_DELAY_STEPS)
+          [steps] "i" (NOT_MISPREDICTION_DELAY_STEPS)
         : "cc", "memory"
     );
 
@@ -155,7 +155,7 @@ void nand(int *in1, int *in2, int *out)
     int *volatile address = out;
     volatile int offset = 0;
 
-    for (int i = 0; i < MISPREDICTION_DELAY_STEPS; ++i)
+    for (int i = 0; i < NAND_MISPREDICTION_DELAY_STEPS; ++i)
         address += offset;
 
     set(address);

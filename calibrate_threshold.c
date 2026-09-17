@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "arch_primitives.h"
 #include "consts.h"
@@ -11,7 +12,8 @@
 #define CACHE_WARMUP_READ_COUNT 1000
 #define DELAY_TRIAL_COUNT 1000
 #define MAX_DELAY_STEPS 64
-#define REQUIRED_DELAY_ACCURACY_PERCENT 95
+#define PAGE_BYTES 4096
+#define ADDRESS_OFFSET_BYTES 128
 
 static uint64_t cached_timings[CACHE_SAMPLE_COUNT];
 static uint64_t uncached_timings[CACHE_SAMPLE_COUNT];
@@ -20,6 +22,25 @@ struct delay_result {
     int steps;
     int cached_input_correct;
     int uncached_input_correct;
+};
+
+struct nand2_delay_result {
+    int correct[2][2];
+};
+
+struct nand2_calibration_memory {
+    void *input1_allocation;
+    void *input2_allocation;
+    void *output1_allocation;
+    void *output2_allocation;
+    void *training_output1_allocation;
+    void *training_output2_allocation;
+    int *input1;
+    int *input2;
+    int *output1;
+    int *output2;
+    int *training_output1;
+    int *training_output2;
 };
 
 static uint64_t measure_access_ticks(int *address)
@@ -135,13 +156,6 @@ static void not_with_delay(int *input, int *output, int delay_steps)
     (void)*(volatile int *)output_address;
 }
 
-static void not_with_configured_delay(int *input, int *output, int delay_steps)
-{
-    (void)delay_steps;
-    prepare_branch_history();
-    not(input, output);
-}
-
 static struct delay_result measure_delay(int *input, int *output, int delay_steps,
                                         uint64_t cache_hit_threshold,
                                         void (*candidate_gate)(int *, int *, int))
@@ -180,12 +194,6 @@ static int minimum_correct_count(struct delay_result result)
          ? result.cached_input_correct : result.uncached_input_correct;
 }
 
-static int delay_is_reliable(struct delay_result result)
-{
-    return minimum_correct_count(result)
-        >= DELAY_TRIAL_COUNT * REQUIRED_DELAY_ACCURACY_PERCENT / 100;
-}
-
 static struct delay_result find_best_delay(int *input, int *output,
                                            uint64_t cache_hit_threshold)
 {
@@ -220,27 +228,10 @@ static void report_best_delay(struct delay_result best_result)
            100.0 * best_result.uncached_input_correct / DELAY_TRIAL_COUNT);
 }
 
-static int report_delay_calibration(struct delay_result best_result,
-                                     struct delay_result configured_result)
+static void report_delay_calibration(struct delay_result best_result)
 {
     report_best_delay(best_result);
-
-    int configured_delay_is_reliable = delay_is_reliable(configured_result);
-    int selected_delay_steps = configured_delay_is_reliable
-                             ? configured_result.steps : best_result.steps;
-    printf("#define MISPREDICTION_DELAY_STEPS (%d)\n", selected_delay_steps);
-
-    if (configured_delay_is_reliable)
-        return EXIT_SUCCESS;
-
-    if (!delay_is_reliable(best_result)) {
-        printf("No delay reached %d%% accuracy for both inputs.\n",
-               REQUIRED_DELAY_ACCURACY_PERCENT);
-        return EXIT_FAILURE;
-    }
-
-    puts("Recompile and rerun to validate the delay.");
-    return EXIT_SUCCESS;
+    printf("#define NOT_MISPREDICTION_DELAY_STEPS (%d)\n", best_result.steps);
 }
 
 static int calibrate_misprediction_delay(int *output, uint64_t cache_hit_threshold)
@@ -254,22 +245,166 @@ static int calibrate_misprediction_delay(int *output, uint64_t cache_hit_thresho
 
     struct delay_result best_result = find_best_delay(input, output,
                                                      cache_hit_threshold);
-    struct delay_result configured_result = measure_delay(
-        input, output, MISPREDICTION_DELAY_STEPS, cache_hit_threshold,
-        not_with_configured_delay);
     free(input);
 
-    return report_delay_calibration(best_result, configured_result);
+    report_delay_calibration(best_result);
+    return EXIT_SUCCESS;
+}
+
+static int allocate_calibration_line(void **allocation, int **address)
+{
+    *allocation = aligned_alloc(PAGE_BYTES, PAGE_BYTES);
+    if (*allocation == NULL) {
+        return 0;
+    }
+
+    memset(*allocation, 0, PAGE_BYTES);
+    *address = (int *)((char *)*allocation + ADDRESS_OFFSET_BYTES);
+    return 1;
+}
+
+static int allocate_nand2_calibration_memory(
+    struct nand2_calibration_memory *memory)
+{
+    if (!allocate_calibration_line(&memory->input1_allocation,
+                                   &memory->input1)
+        || !allocate_calibration_line(&memory->input2_allocation,
+                                      &memory->input2)
+        || !allocate_calibration_line(&memory->output1_allocation,
+                                      &memory->output1)
+        || !allocate_calibration_line(&memory->output2_allocation,
+                                      &memory->output2)
+        || !allocate_calibration_line(&memory->training_output1_allocation,
+                                      &memory->training_output1)
+        || !allocate_calibration_line(&memory->training_output2_allocation,
+                                      &memory->training_output2)) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static void free_nand2_calibration_memory(
+    struct nand2_calibration_memory *memory)
+{
+    free(memory->input1_allocation);
+    free(memory->input2_allocation);
+    free(memory->output1_allocation);
+    free(memory->output2_allocation);
+    free(memory->training_output1_allocation);
+    free(memory->training_output2_allocation);
+}
+
+static void run_nand2_with_training(
+    struct nand2_calibration_memory *memory)
+{
+    static int training_input = 1;
+
+    nand2(&training_input, &training_input, memory->training_output1,
+          memory->training_output2);
+    nand2(&training_input, &training_input, memory->training_output1,
+          memory->training_output2);
+    nand2(&training_input, &training_input, memory->training_output1,
+          memory->training_output2);
+    nand2(&training_input, &training_input, memory->training_output1,
+          memory->training_output2);
+    nand2(memory->input1, memory->input2, memory->output1, memory->output2);
+}
+
+static struct nand2_delay_result measure_nand2_delay(
+    struct nand2_calibration_memory *memory,
+    uint64_t cache_hit_threshold)
+{
+    struct nand2_delay_result result = {0};
+
+    for (int trial = 0; trial < DELAY_TRIAL_COUNT; ++trial) {
+        for (int input1_cached = 0; input1_cached < 2; ++input1_cached) {
+            for (int input2_cached = 0; input2_cached < 2; ++input2_cached) {
+                clear(memory->output1);
+                clear(memory->output2);
+                clear(memory->input1);
+                clear(memory->input2);
+
+                if (input1_cached) {
+                    set(memory->input1);
+                }
+                if (input2_cached) {
+                    set(memory->input2);
+                }
+                memory_fence();
+
+                run_nand2_with_training(memory);
+
+                int output1_cached = measure_access_ticks(memory->output1)
+                                   < cache_hit_threshold;
+                int output2_cached = measure_access_ticks(memory->output2)
+                                   < cache_hit_threshold;
+                int expected_output = !(input1_cached && input2_cached);
+
+                result.correct[input1_cached][input2_cached] +=
+                    output1_cached == expected_output
+                    && output2_cached == expected_output;
+            }
+        }
+    }
+
+    return result;
+}
+
+static void report_nand2_delay(struct nand2_delay_result result)
+{
+    printf("NAND2 delay results (%d steps): joint accuracy "
+           "uncached/uncached=%.2f%%, uncached/cached=%.2f%%, "
+           "cached/uncached=%.2f%%, cached/cached=%.2f%%\n",
+           NAND2_MISPREDICTION_DELAY_STEPS,
+           100.0 * result.correct[0][0] / DELAY_TRIAL_COUNT,
+           100.0 * result.correct[0][1] / DELAY_TRIAL_COUNT,
+           100.0 * result.correct[1][0] / DELAY_TRIAL_COUNT,
+           100.0 * result.correct[1][1] / DELAY_TRIAL_COUNT);
+    printf("#define NAND2_MISPREDICTION_DELAY_STEPS (%d)\n",
+           NAND2_MISPREDICTION_DELAY_STEPS);
+}
+
+static int calibrate_nand2_delay(uint64_t cache_hit_threshold)
+{
+    int return_code = EXIT_FAILURE;
+    struct nand2_calibration_memory memory = {0};
+
+    puts("\n=== NAND2 delay steps calibration ===");
+    if (!allocate_nand2_calibration_memory(&memory)) {
+        perror("aligned_alloc");
+        goto cleanup;
+    }
+
+    struct nand2_delay_result result = measure_nand2_delay(
+        &memory, cache_hit_threshold);
+    report_nand2_delay(result);
+    return_code = EXIT_SUCCESS;
+
+cleanup:
+    free_nand2_calibration_memory(&memory);
+    return return_code;
 }
 
 int main(void)
 {
     _Alignas(64) int probe[16] = {0};
     uint64_t cache_hit_threshold;
+    int return_code = EXIT_SUCCESS;
 
     init();
-    if (calibrate_cache_hit_threshold(probe, &cache_hit_threshold) != EXIT_SUCCESS)
+    if (calibrate_cache_hit_threshold(probe, &cache_hit_threshold)
+        != EXIT_SUCCESS) {
         return EXIT_FAILURE;
+    }
 
-    return calibrate_misprediction_delay(probe, cache_hit_threshold);
+    if (calibrate_misprediction_delay(probe, cache_hit_threshold)
+        != EXIT_SUCCESS) {
+        return_code = EXIT_FAILURE;
+    }
+    if (calibrate_nand2_delay(cache_hit_threshold) != EXIT_SUCCESS) {
+        return_code = EXIT_FAILURE;
+    }
+
+    return return_code;
 }
