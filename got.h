@@ -18,7 +18,9 @@ int test(int *ptr);
 void not(int *in, int *out);
 void imul_not(int *in, int *out);
 uintptr_t imul_not2(uintptr_t in, uintptr_t out, uintptr_t trash);
+
 void nand(int *in1, int *in2, int *out);
+void nand2(int *in1, int *in2, int *out1, int *out2);
 
 void init(void);
 

@@ -161,6 +161,31 @@ void nand(int *in1, int *in2, int *out)
     set(address);
 }
 
+// nand with two outputs = fan out of 2.
+void nand2(int *in1, int *in2, int *out1, int *out2)
+{
+    for (int i = 0; i < 256; ++i)
+        asm("" ::: "memory");
+
+    memory_fence();
+
+    if (*(volatile int *)in1 + *(volatile int *)in2 == 0) {
+        return;
+    }
+
+    int *volatile address1 = out1;
+    int *volatile address2 = out2;
+    volatile int offset = 0;
+
+    for (int i = 0; i < NAND2_MISPREDICTION_DELAY_STEPS; ++i) {
+        address1 += offset;
+        address2 += offset;
+    }
+
+    set(address1);
+    set(address2);
+}
+
 void init(void)
 {
     /* ramping up CPU */
