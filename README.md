@@ -8,6 +8,7 @@ Undergraduate's project in micro-architectural attacks and weird gates.
 - [Basic operations](#basic-operations)
 - [Testing Mispredictions](#testing-mispredictions)
 - [NOT gate](#not-gate)
+- [NAND gate](#nand-gate)
 
 ## Calibration
 
@@ -101,20 +102,56 @@ branch2: 0.09% mispredictions detected (9/10000 cached after inverse condition)
 
 ## NOT gate
 
-`task3.c` ramps up the CPU and tests `not()` with 10,000 random input cache
-states. Each trial trains twice, clears the output, prepares the input, and
-checks that the output has the opposite cache state.
+`task3.c` tests `not()`, `imul_not()`, and `imul_not2()` with 100,000 random
+input cache states. It ramps up the CPU, trains the predictor, and reports
+cached- and uncached-input accuracy for each implementation.
 
 ```bash
-cc -O2 -std=gnu11 task3.c got.c -o task3.out && taskset -c 0 ./task3.out
+cc -O1 -std=gnu11 task3.c got.c -o task3.out && taskset -c 0 ./task3.out
 ```
+
+Use `-O1` because optimization changes the branch-history loop and can strongly
+affect the result.
+
+Expect three output blocks. Example output (rates vary by machine and run):
+
+```text
+not:
+  Cached input: 100.00% accuracy (49826/49826 correct)
+  Uncached input: 91.00% accuracy (45658/50174 correct)
+imul_not:
+  Cached input: 100.00% accuracy (49825/49826 correct)
+  Uncached input: 0.03% accuracy (17/50174 correct)
+imul_not2:
+  Cached input: 99.99% accuracy (49821/49826 correct)
+  Uncached input: 0.05% accuracy (24/50174 correct)
+```
+
+Accuracy is reported separately for each input state: cached inputs should leave
+the output uncached, while uncached inputs should cache the output (hence - not).
+
+## NAND gate
+
+`task4.c` ramps up the CPU and runs 100,000 randomized tests of `nand()`. It
+trains the predictor before each invocation and reports accuracy separately for
+all four input cache-state combinations.
+
+```bash
+cc -O1 -falign-functions=8 -std=gnu11 task4.c got.c -o task4.out && taskset -c 0 ./task4.out
+```
+
+The alignment flag `-falign-functions=8` gives `nand()` a branch-predictor-friendly placement on the
+tested machine. Results may change after modifying the source, compiler, or CPU.
 
 Example output (rates vary by machine and run):
 
 ```text
-Cached input: 100.00% accuracy (4985/4985 correct)
-Uncached input: 35.27% accuracy (1769/5015 correct)
+Inputs (uncached, uncached), expected output cached: 80.63% accuracy (20124/24958 correct)
+Inputs (uncached, cached), expected output cached: 77.95% accuracy (19259/24708 correct)
+Inputs (cached, uncached), expected output cached: 79.07% accuracy (20002/25295 correct)
+Inputs (cached, cached), expected output uncached: 99.59% accuracy (24937/25039 correct)
 ```
 
-Accuracy is reported separately for each input state: cached inputs should leave
-the output uncached, while uncached inputs should cache the output.
+Cached represents logical 1 and uncached represents logical 0. NAND should
+produce a cached output unless both inputs are cached. Each row shows the
+percentage and count of trials in which `test()` observed that expected state.

@@ -143,6 +143,11 @@ uintptr_t imul_not2(uintptr_t in, uintptr_t out, uintptr_t trash)
 
 void nand(int *in1, int *in2, int *out)
 {
+    for (int i = 0; i < 256; ++i)
+        asm("" ::: "memory");
+
+    memory_fence();
+
     if (*(volatile int *)in1 + *(volatile int *)in2 == 0) {
         return;
     }
