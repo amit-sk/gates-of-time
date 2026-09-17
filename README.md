@@ -7,6 +7,7 @@ Undergraduate's project in micro-architectural attacks and weird gates.
 - [Calibration](#calibration)
 - [Basic operations](#basic-operations)
 - [Testing Mispredictions](#testing-mispredictions)
+- [NOT gate](#not-gate)
 
 ## Calibration
 
@@ -97,3 +98,23 @@ Example output (rates vary by machine and run):
 branch1: 0.01% mispredictions detected (1/10000 cached after inverse condition)
 branch2: 0.09% mispredictions detected (9/10000 cached after inverse condition)
 ```
+
+## NOT gate
+
+`task3.c` ramps up the CPU and tests `not()` with 10,000 random input cache
+states. Each trial trains twice, clears the output, prepares the input, and
+checks that the output has the opposite cache state.
+
+```bash
+cc -O2 -std=gnu11 task3.c got.c -o task3.out && taskset -c 0 ./task3.out
+```
+
+Example output (rates vary by machine and run):
+
+```text
+Cached input: 100.00% accuracy (4985/4985 correct)
+Uncached input: 35.27% accuracy (1769/5015 correct)
+```
+
+Accuracy is reported separately for each input state: cached inputs should leave
+the output uncached, while uncached inputs should cache the output.
