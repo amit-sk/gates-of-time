@@ -36,13 +36,18 @@ struct observed_outputs {
     int output2_cached;
 };
 
-struct and_memory {
+typedef uintptr_t (*binary_gate)(uintptr_t input1, uintptr_t input2,
+                                 uintptr_t output, uintptr_t trash);
+
+typedef int (*binary_operation)(int input1, int input2);
+
+struct binary_gate_memory {
     struct cache_line input1;
     struct cache_line input2;
     struct cache_line output;
 };
 
-struct and_accuracy_results {
+struct binary_gate_accuracy_results {
     int totals[2][2];
     int correct[2][2];
 };
@@ -173,7 +178,7 @@ cleanup:
     return return_code;
 }
 
-static int allocate_and_memory(struct and_memory *memory)
+static int allocate_binary_gate_memory(struct binary_gate_memory *memory)
 {
     if (!allocate_cache_line(&memory->input1)
         || !allocate_cache_line(&memory->input2)
@@ -184,18 +189,19 @@ static int allocate_and_memory(struct and_memory *memory)
     return 1;
 }
 
-static void free_and_memory(struct and_memory *memory)
+static void free_binary_gate_memory(struct binary_gate_memory *memory)
 {
     free_cache_line(&memory->input1);
     free_cache_line(&memory->input2);
     free_cache_line(&memory->output);
 }
 
-static uintptr_t run_and_trial(struct and_memory *memory,
-                               int input1_cached,
-                               int input2_cached,
-                               uintptr_t trash,
-                               int *output_cached)
+static uintptr_t run_binary_gate_trial(struct binary_gate_memory *memory,
+                                       binary_gate gate,
+                                       int input1_cached,
+                                       int input2_cached,
+                                       uintptr_t trash,
+                                       int *output_cached)
 {
     clear(memory->input1.address);
     clear(memory->input2.address);
@@ -209,32 +215,36 @@ static uintptr_t run_and_trial(struct and_memory *memory,
     }
     memory_fence();
 
-    trash = and_gate((uintptr_t)memory->input1.address,
-                     (uintptr_t)memory->input2.address,
-                     (uintptr_t)memory->output.address, trash);
+    trash = gate((uintptr_t)memory->input1.address,
+                 (uintptr_t)memory->input2.address,
+                 (uintptr_t)memory->output.address, trash);
     *output_cached = test(memory->output.address);
     return trash;
 }
 
-static void record_and_result(struct and_accuracy_results *results,
-                              int input1_cached,
-                              int input2_cached,
-                              int output_cached)
+static void record_binary_gate_result(
+    struct binary_gate_accuracy_results *results,
+    binary_operation operation,
+    int input1_cached,
+    int input2_cached,
+    int output_cached)
 {
-    int expected_output = input1_cached && input2_cached;
+    int expected_output = operation(input1_cached, input2_cached);
 
     ++results->totals[input1_cached][input2_cached];
     results->correct[input1_cached][input2_cached] +=
         output_cached == expected_output;
 }
 
-static void report_and_accuracy(const struct and_accuracy_results *results,
-                                int input1_cached,
-                                int input2_cached)
+static void report_binary_gate_accuracy(
+    const struct binary_gate_accuracy_results *results,
+    binary_operation operation,
+    int input1_cached,
+    int input2_cached)
 {
     int total = results->totals[input1_cached][input2_cached];
     int correct = results->correct[input1_cached][input2_cached];
-    int expected_output = input1_cached && input2_cached;
+    int expected_output = operation(input1_cached, input2_cached);
 
     printf("Inputs (%s, %s), expected output %s: %.2f%% (%d/%d)\n",
            input1_cached ? "cached" : "uncached",
@@ -243,22 +253,23 @@ static void report_and_accuracy(const struct and_accuracy_results *results,
            100.0 * correct / total, correct, total);
 }
 
-static int test_and_gate(void)
+static int test_binary_gate(const char *name, binary_gate gate,
+                            binary_operation operation)
 {
     int return_code = EXIT_FAILURE;
-    struct and_memory memory = {0};
-    struct and_accuracy_results results = {0};
+    struct binary_gate_memory memory = {0};
+    struct binary_gate_accuracy_results results = {0};
     uintptr_t trash = 0;
 
-    if (!allocate_and_memory(&memory)) {
+    if (!allocate_binary_gate_memory(&memory)) {
         perror("aligned_alloc");
         goto cleanup;
     }
 
     for (int trial = 0; trial < WARMUP_TRIALS; ++trial) {
         int output_cached;
-        trash = run_and_trial(&memory, rand() % 2, rand() % 2, trash,
-                              &output_cached);
+        trash = run_binary_gate_trial(&memory, gate, rand() % 2, rand() % 2,
+                                      trash, &output_cached);
     }
 
     for (int trial = 0; trial < TRIALS; ++trial) {
@@ -266,22 +277,32 @@ static int test_and_gate(void)
         int input2_cached = rand() % 2;
         int output_cached;
 
-        trash = run_and_trial(&memory, input1_cached, input2_cached, trash,
-                              &output_cached);
-        record_and_result(&results, input1_cached, input2_cached,
-                          output_cached);
+        trash = run_binary_gate_trial(&memory, gate, input1_cached,
+                                      input2_cached, trash, &output_cached);
+        record_binary_gate_result(&results, operation, input1_cached,
+                                  input2_cached, output_cached);
     }
 
-    printf("\nAND gate:\n");
-    report_and_accuracy(&results, 0, 0);
-    report_and_accuracy(&results, 0, 1);
-    report_and_accuracy(&results, 1, 0);
-    report_and_accuracy(&results, 1, 1);
+    printf("\n%s:\n", name);
+    report_binary_gate_accuracy(&results, operation, 0, 0);
+    report_binary_gate_accuracy(&results, operation, 0, 1);
+    report_binary_gate_accuracy(&results, operation, 1, 0);
+    report_binary_gate_accuracy(&results, operation, 1, 1);
     return_code = EXIT_SUCCESS;
 
 cleanup:
-    free_and_memory(&memory);
+    free_binary_gate_memory(&memory);
     return return_code;
+}
+
+static int and_operation(int input1, int input2)
+{
+    return input1 && input2;
+}
+
+static int or_operation(int input1, int input2)
+{
+    return input1 || input2;
 }
 
 int main(void)
@@ -289,7 +310,9 @@ int main(void)
     srand((unsigned int)time(NULL));
     init();
 
-    if (test_fan2() != EXIT_SUCCESS || test_and_gate() != EXIT_SUCCESS) {
+    if (test_fan2() != EXIT_SUCCESS
+        || test_binary_gate("AND gate", and, and_operation) != EXIT_SUCCESS
+        || test_binary_gate("OR gate", or, or_operation) != EXIT_SUCCESS) {
         return EXIT_FAILURE;
     }
 
