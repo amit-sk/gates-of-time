@@ -182,8 +182,7 @@ int main(void)
     for (int trial = 0; trial < TRIALS; ++trial) {
         int input1_cached = rand() % 2;
         int input2_cached = rand() % 2;
-        struct observed_outputs outputs =
-            run_trial(&memory, input1_cached, input2_cached);
+        struct observed_outputs outputs = run_trial(&memory, input1_cached, input2_cached);
 
         record_result(&results, input1_cached, input2_cached, outputs);
     }

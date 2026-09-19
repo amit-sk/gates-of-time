@@ -9,6 +9,7 @@ Undergraduate's project in micro-architectural attacks and weird gates.
 - [Testing Mispredictions](#testing-mispredictions)
 - [NOT gate](#not-gate)
 - [NAND gate](#nand-gate)
+- [NAND2 gate](#nand2-gate)
 
 ## Calibration
 
@@ -187,3 +188,46 @@ produce a cached output unless both inputs are cached. Each row shows the
 percentage and count of trials in which `test()` observed that expected state.
 `nand()` retains its separately calibrated `NAND_MISPREDICTION_DELAY_STEPS`
 value of 50; all gate tests use the same compiler and CPU-pinning procedure.
+
+## NAND2 gate
+
+`nand2()` implements NAND with two output cache lines. `task5.c` runs 100,000
+randomized tests, trains the predictor four times before each measured call, and
+reports results for all four input combinations.
+
+```bash
+cc -O1 -falign-functions=8 -std=gnu11 task5.c got.c -o task5.out && taskset -c 0 ./task5.out
+```
+
+Both outputs should be cached unless both inputs are cached. `Output 1 correct`
+and `Output 2 correct` measure each output separately. `Both correct` is the
+joint gate success rate. `Outputs identical` only measures agreement, so both
+outputs can agree while both are wrong.
+
+Example output with four training calls and the current 27-step delay:
+
+```text
+Inputs (uncached, uncached), expected outputs cached:
+  Output 1 correct: 64.22% (15960/24852)
+  Output 2 correct: 65.64% (16314/24852)
+  Both correct: 63.53% (15789/24852)
+  Outputs identical: 97.20% (24156/24852)
+Inputs (uncached, cached), expected outputs cached:
+  Output 1 correct: 63.23% (15923/25183)
+  Output 2 correct: 64.83% (16326/25183)
+  Both correct: 62.18% (15659/25183)
+  Outputs identical: 96.30% (24252/25183)
+Inputs (cached, uncached), expected outputs cached:
+  Output 1 correct: 63.43% (15937/25127)
+  Output 2 correct: 65.26% (16398/25127)
+  Both correct: 62.45% (15691/25127)
+  Outputs identical: 96.21% (24174/25127)
+Inputs (cached, cached), expected outputs uncached:
+  Output 1 correct: 100.00% (24838/24838)
+  Output 2 correct: 100.00% (24838/24838)
+  Both correct: 100.00% (24838/24838)
+  Outputs identical: 100.00% (24838/24838)
+```
+
+These rates are sensitive to the delay, predictor training, compiled code
+placement, CPU, and other system activity.
