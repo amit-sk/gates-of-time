@@ -259,11 +259,11 @@ uintptr_t fan2(uintptr_t in, uintptr_t out1, uintptr_t out2,
     return fan2_impl(in, out1, out2, true, trash);
 }
 
-static uintptr_t and_gate_impl(uintptr_t input1,
-                               uintptr_t input2,
-                               uintptr_t output,
-                               bool wet_run,
-                               uintptr_t trash)
+uintptr_t and_gate_impl(uintptr_t input1,
+                        uintptr_t input2,
+                        uintptr_t output,
+                        bool wet_run,
+                        uintptr_t trash)
 {
     for (int i = 0; i < 256; ++i) {
         asm("" ::: "memory");
@@ -323,11 +323,11 @@ uintptr_t and(uintptr_t input1, uintptr_t input2, uintptr_t output, uintptr_t tr
     return and_gate_impl(input1, input2, output, true, trash);
 }
 
-static uintptr_t or_gate_impl(uintptr_t input1,
-                              uintptr_t input2,
-                              uintptr_t output,
-                              bool wet_run,
-                              uintptr_t trash)
+uintptr_t or_gate_impl(uintptr_t input1,
+                       uintptr_t input2,
+                       uintptr_t output,
+                       bool wet_run,
+                       uintptr_t trash)
 {
     for (int i = 0; i < 256; ++i) {
         asm("" ::: "memory");
