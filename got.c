@@ -20,6 +20,7 @@
 #define SIGNAL_STRIDE_BYTES 320
 
 int64_t SLOW_PARAM = 13;
+static int predictor_training_input = 1;
 
 void clear(int *ptr)
 {
@@ -400,6 +401,8 @@ uintptr_t half_adder_impl(volatile uintptr_t a, volatile uintptr_t b, volatile u
         N1,
         N2,
         O,
+        TRAINING_OUTPUT1,
+        TRAINING_OUTPUT2,
         TEMPORARY_COUNT
     };
 
@@ -443,7 +446,20 @@ uintptr_t half_adder_impl(volatile uintptr_t a, volatile uintptr_t b, volatile u
     memory_flush((void *)temporary[N2]);
     memory_fence();
 
-    nand2((int *)temporary[A1], (int *)temporary[B1], (int *)temporary[N1], (int *)temporary[N2]);
+    nand2(&predictor_training_input, &predictor_training_input,
+          (int *)temporary[TRAINING_OUTPUT1],
+          (int *)temporary[TRAINING_OUTPUT2]);
+    nand2(&predictor_training_input, &predictor_training_input,
+          (int *)temporary[TRAINING_OUTPUT1],
+          (int *)temporary[TRAINING_OUTPUT2]);
+    nand2(&predictor_training_input, &predictor_training_input,
+          (int *)temporary[TRAINING_OUTPUT1],
+          (int *)temporary[TRAINING_OUTPUT2]);
+    nand2(&predictor_training_input, &predictor_training_input,
+          (int *)temporary[TRAINING_OUTPUT1],
+          (int *)temporary[TRAINING_OUTPUT2]);
+    nand2((int *)temporary[A1], (int *)temporary[B1],
+          (int *)temporary[N1], (int *)temporary[N2]);
 
     memory_flush((void *)temporary[O]);
     memory_fence();
@@ -458,6 +474,10 @@ uintptr_t half_adder_impl(volatile uintptr_t a, volatile uintptr_t b, volatile u
     memory_flush((void *)carry);
     memory_fence();
 
+    not(&predictor_training_input, (int *)temporary[TRAINING_OUTPUT1]);
+    not(&predictor_training_input, (int *)temporary[TRAINING_OUTPUT1]);
+    not(&predictor_training_input, (int *)temporary[TRAINING_OUTPUT1]);
+    not(&predictor_training_input, (int *)temporary[TRAINING_OUTPUT1]);
     not((int *)temporary[N2], (int *)carry);
 
     memory_fence();
