@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <stdbool.h>
+#include <float.h>
 
 #include "arch_primitives.h"
 #include "consts.h"
@@ -184,6 +185,85 @@ void nand2(int *in1, int *in2, int *out1, int *out2)
 
     set(address1);
     set(address2);
+}
+
+uintptr_t fan2_impl(uintptr_t in,
+                    uintptr_t out1,
+                    uintptr_t out2,
+                    bool wet_run,
+                    uintptr_t trash)
+{
+    for (int i = 0; i < 256; ++i) {
+        asm("" ::: "memory");
+    }
+
+    const uintptr_t sentinel = 0xbaaaaad;
+
+    in |= in == sentinel;
+    out1 |= out1 == sentinel;
+    out2 |= out2 == sentinel;
+    wet_run |= wet_run == sentinel;
+    trash |= trash == sentinel;
+
+    trash = *(uintptr_t *)((in - 128) | (trash == sentinel));
+    trash = *(uintptr_t *)((out1 - 128) | (trash == sentinel));
+    trash = *(uintptr_t *)((out2 - 128) | (trash == sentinel));
+    memory_fence();
+
+    const double start = DBL_MIN;
+    const double denormal_result = DBL_MIN / 2;
+    double divide_by = wet_run + 1;
+    double result = start / divide_by;
+
+    if (result == denormal_result) {
+        return trash;
+    }
+
+    asm volatile("");
+    if (!wet_run) {
+        return trash;
+    }
+
+    trash = *(uintptr_t *)in;
+
+    volatile uintptr_t address1 = out1 + trash;
+    volatile uintptr_t address2 = out2 + trash;
+    volatile uintptr_t offset = 0;
+
+    for (int i = 0; i < FAN2_MISPREDICTION_DELAY_STEPS; ++i) {
+        address1 += offset;
+        address2 += offset;
+    }
+
+    uintptr_t sum = 0;
+    sum += *(uintptr_t *)address1;
+    sum += *(uintptr_t *)address2;
+    return trash + sum;
+}
+
+uintptr_t fan2(uintptr_t in, uintptr_t out1, uintptr_t out2,
+               uintptr_t trash)
+{
+    _Alignas(64) unsigned char fake_storage[256] = {0};
+    uintptr_t fake = (uintptr_t)(fake_storage + 128);
+
+    trash = fan2_impl(fake, fake, fake, false, trash);
+    trash = fan2_impl(fake, fake, fake, false, trash);
+    trash = fan2_impl(fake, fake, fake, false, trash);
+    trash = fan2_impl(fake, fake, fake, false, trash);
+    return fan2_impl(in, out1, out2, true, trash);
+}
+
+// similar to the github implementation linked to the paper
+uintptr_t half_adder_impl(volatile uintptr_t a, volatile uintptr_t b, volatile uintptr_t sum, volatile uintptr_t carry, volatile uintptr_t trash)
+{
+    /*
+     * t1​=NAND(a,b)
+     * t2​=NAND(a,t1​)
+     * t3​=NAND(b,t1​)​
+     * s=NAND(t2​,t3​)
+     * c=NOT(t1​)​
+    */
 }
 
 void init(void)

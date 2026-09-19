@@ -21,6 +21,8 @@ uintptr_t imul_not2(uintptr_t in, uintptr_t out, uintptr_t trash);
 
 void nand(int *in1, int *in2, int *out);
 void nand2(int *in1, int *in2, int *out1, int *out2);
+uintptr_t fan2(uintptr_t in, uintptr_t out1, uintptr_t out2,
+               uintptr_t trash);
 
 void init(void);
 
