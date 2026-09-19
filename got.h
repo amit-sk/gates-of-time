@@ -31,6 +31,11 @@ uintptr_t or(uintptr_t input1, uintptr_t input2, uintptr_t output,
 uintptr_t half_adder_impl(volatile uintptr_t a, volatile uintptr_t b,
                           volatile uintptr_t sum, volatile uintptr_t carry,
                           volatile uintptr_t trash);
+uintptr_t full_adder_impl(volatile uintptr_t a, volatile uintptr_t b,
+                          volatile uintptr_t carry_in,
+                          volatile uintptr_t sum,
+                          volatile uintptr_t carry_out,
+                          volatile uintptr_t trash);
 
 void init(void);
 

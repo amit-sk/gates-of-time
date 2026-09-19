@@ -44,6 +44,8 @@ int test(int *ptr)
     return (end - start) < CACHE_HIT_THRESHOLD;
 }
 
+// extremely sensitive to alignment, adding new functions affected the predictor here. had to align.
+__attribute__((aligned(4096)))
 void not(int *in, int *out)
 {
     for (int i = 0; i < 256; ++i)
@@ -482,6 +484,51 @@ uintptr_t half_adder_impl(volatile uintptr_t a, volatile uintptr_t b, volatile u
 
     memory_fence();
 
+    free(allocation);
+    return trash;
+}
+
+uintptr_t full_adder_impl(volatile uintptr_t a, volatile uintptr_t b,
+                          volatile uintptr_t carry_in,
+                          volatile uintptr_t sum,
+                          volatile uintptr_t carry_out,
+                          volatile uintptr_t trash)
+{
+    enum {
+        PARTIAL_SUM,
+        GENERATED_CARRY,
+        PROPAGATED_CARRY,
+        TEMPORARY_COUNT
+    };
+
+    void *allocation = aligned_alloc(PAGE_BYTES, PAGE_BYTES);
+    if (allocation == NULL) {
+        return trash;
+    }
+
+    memset(allocation, 0, PAGE_BYTES);
+
+    uintptr_t temporary[TEMPORARY_COUNT];
+    for (int i = 0; i < TEMPORARY_COUNT; ++i) {
+        temporary[i] = (uintptr_t)((char *)allocation
+                                   + ADDRESS_PADDING_BYTES
+                                   + i * SIGNAL_STRIDE_BYTES);
+    }
+
+    trash = half_adder_impl(a, b,
+                            temporary[PARTIAL_SUM],
+                            temporary[GENERATED_CARRY], trash);
+
+    trash = half_adder_impl(temporary[PARTIAL_SUM], carry_in, sum,
+                            temporary[PROPAGATED_CARRY], trash);
+
+    memory_flush((void *)carry_out);
+    memory_fence();
+
+    trash = or(temporary[GENERATED_CARRY],
+               temporary[PROPAGATED_CARRY], carry_out, trash);
+
+    memory_fence();
     free(allocation);
     return trash;
 }
