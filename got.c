@@ -254,6 +254,71 @@ uintptr_t fan2(uintptr_t in, uintptr_t out1, uintptr_t out2,
     return fan2_impl(in, out1, out2, true, trash);
 }
 
+static uintptr_t and_gate_impl(uintptr_t input1,
+                               uintptr_t input2,
+                               uintptr_t output,
+                               bool wet_run,
+                               uintptr_t trash)
+{
+    for (int i = 0; i < 256; ++i) {
+        asm("" ::: "memory");
+    }
+
+    const uintptr_t sentinel = 0xbaaaaad;
+
+    input1 |= input1 == sentinel;
+    input2 |= input2 == sentinel;
+    output |= output == sentinel;
+    wet_run |= wet_run == sentinel;
+    trash |= trash == sentinel;
+
+    trash = *(uintptr_t *)((input1 - 128) | (trash == sentinel));
+    trash = *(uintptr_t *)((input2 - 128) | (trash == sentinel));
+    trash = *(uintptr_t *)((output - 128) | (trash == sentinel));
+    memory_fence();
+
+    const double start = DBL_MIN;
+    const double denormal_result = DBL_MIN / 2;
+    double divide_by = wet_run + 1;
+    double result = start / divide_by;
+
+    if (result == denormal_result) {
+        return trash;
+    }
+
+    asm volatile("");
+    if (!wet_run) {
+        return trash;
+    }
+
+    uintptr_t value1 = *(uintptr_t *)(input1 | (trash == sentinel));
+    uintptr_t value2 = *(uintptr_t *)(input2 | (trash == sentinel));
+    trash = value1 | value2;
+
+    volatile uintptr_t address = output + trash;
+    volatile uintptr_t offset = 0;
+
+    for (int i = 0; i < AND_MISPREDICTION_DELAY_STEPS; ++i) {
+        address += offset;
+    }
+
+    uintptr_t sum = *(uintptr_t *)address;
+    return trash + sum;
+}
+
+uintptr_t and_gate(uintptr_t input1, uintptr_t input2, uintptr_t output,
+                   uintptr_t trash)
+{
+    _Alignas(64) unsigned char fake_storage[256] = {0};
+    uintptr_t fake = (uintptr_t)(fake_storage + 128);
+
+    trash = and_gate_impl(fake, fake, fake, false, trash);
+    trash = and_gate_impl(fake, fake, fake, false, trash);
+    trash = and_gate_impl(fake, fake, fake, false, trash);
+    trash = and_gate_impl(fake, fake, fake, false, trash);
+    return and_gate_impl(input1, input2, output, true, trash);
+}
+
 // similar to the github implementation linked to the paper
 uintptr_t half_adder_impl(volatile uintptr_t a, volatile uintptr_t b, volatile uintptr_t sum, volatile uintptr_t carry, volatile uintptr_t trash)
 {

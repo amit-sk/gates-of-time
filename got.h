@@ -23,6 +23,8 @@ void nand(int *in1, int *in2, int *out);
 void nand2(int *in1, int *in2, int *out1, int *out2);
 uintptr_t fan2(uintptr_t in, uintptr_t out1, uintptr_t out2,
                uintptr_t trash);
+uintptr_t and_gate(uintptr_t input1, uintptr_t input2, uintptr_t output,
+                   uintptr_t trash);
 
 void init(void);
 
