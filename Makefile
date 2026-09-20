@@ -11,9 +11,9 @@ COMMON_CFLAGS := -std=gnu11 -Wall -Wextra
 EARLY_TASK_CFLAGS := -O2
 GATE_CFLAGS := -O1 -falign-functions=8
 
-TASK_NAMES := task1 task2 task3 task4 task5 task6
+TASK_NAMES := task1 task2 task3 task4 task5 task6 task7
 EARLY_PROGRAMS := task1.out task2.out
-GATE_PROGRAMS := task3.out task4.out task5.out task6.out calibrate_threshold.out
+GATE_PROGRAMS := task3.out task4.out task5.out task6.out task7.out calibrate_threshold.out
 TASK_PROGRAMS := $(addsuffix .out,$(TASK_NAMES))
 PROGRAMS := $(TASK_PROGRAMS) calibrate_threshold.out
 COMMON_DEPENDENCIES := got.c got.h consts.h arch_primitives.h
@@ -52,6 +52,7 @@ run-all: all
 	$(TASKSET) -c $(CPU) ./task4.out
 	$(TASKSET) -c $(CPU) ./task5.out
 	$(TASKSET) -c $(CPU) ./task6.out
+	$(TASKSET) -c $(CPU) ./task7.out
 
 clean:
 	$(RM) $(PROGRAMS)

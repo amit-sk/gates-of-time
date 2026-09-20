@@ -71,26 +71,6 @@ struct half_adder_accuracy_results {
     int both_correct[2][2];
 };
 
-struct full_adder_memory {
-    struct cache_line input1;
-    struct cache_line input2;
-    struct cache_line carry_in;
-    struct cache_line sum;
-    struct cache_line carry_out;
-};
-
-struct full_adder_outputs {
-    int sum_cached;
-    int carry_cached;
-};
-
-struct full_adder_accuracy_results {
-    int totals[2][2][2];
-    int sum_correct[2][2][2];
-    int carry_correct[2][2][2];
-    int both_correct[2][2][2];
-};
-
 static int allocate_cache_line(struct cache_line *line)
 {
     line->allocation = aligned_alloc(PAGE_BYTES, PAGE_BYTES);
@@ -474,163 +454,6 @@ cleanup:
     return return_code;
 }
 
-static int allocate_full_adder_memory(struct full_adder_memory *memory)
-{
-    if (!allocate_cache_line(&memory->input1)
-        || !allocate_cache_line(&memory->input2)
-        || !allocate_cache_line(&memory->carry_in)
-        || !allocate_cache_line(&memory->sum)
-        || !allocate_cache_line(&memory->carry_out)) {
-        return 0;
-    }
-
-    return 1;
-}
-
-static void free_full_adder_memory(struct full_adder_memory *memory)
-{
-    free_cache_line(&memory->input1);
-    free_cache_line(&memory->input2);
-    free_cache_line(&memory->carry_in);
-    free_cache_line(&memory->sum);
-    free_cache_line(&memory->carry_out);
-}
-
-static uintptr_t run_full_adder_trial(
-    struct full_adder_memory *memory,
-    int input1_cached,
-    int input2_cached,
-    int carry_in_cached,
-    uintptr_t trash,
-    struct full_adder_outputs *outputs)
-{
-    clear(memory->input1.address);
-    clear(memory->input2.address);
-    clear(memory->carry_in.address);
-    clear(memory->sum.address);
-    clear(memory->carry_out.address);
-
-    if (input1_cached) {
-        set(memory->input1.address);
-    }
-    if (input2_cached) {
-        set(memory->input2.address);
-    }
-    if (carry_in_cached) {
-        set(memory->carry_in.address);
-    }
-    memory_fence();
-
-    trash = full_adder_impl((uintptr_t)memory->input1.address,
-                            (uintptr_t)memory->input2.address,
-                            (uintptr_t)memory->carry_in.address,
-                            (uintptr_t)memory->sum.address,
-                            (uintptr_t)memory->carry_out.address, trash);
-    outputs->sum_cached = test(memory->sum.address);
-    outputs->carry_cached = test(memory->carry_out.address);
-    return trash;
-}
-
-static void record_full_adder_result(
-    struct full_adder_accuracy_results *results,
-    int input1_cached,
-    int input2_cached,
-    int carry_in_cached,
-    const struct full_adder_outputs *outputs)
-{
-    int input_sum = input1_cached + input2_cached + carry_in_cached;
-    int expected_sum = input_sum % 2;
-    int expected_carry = input_sum >= 2;
-    int sum_correct = outputs->sum_cached == expected_sum;
-    int carry_correct = outputs->carry_cached == expected_carry;
-
-    ++results->totals[input1_cached][input2_cached][carry_in_cached];
-    results->sum_correct[input1_cached][input2_cached][carry_in_cached] +=
-        sum_correct;
-    results->carry_correct[input1_cached][input2_cached][carry_in_cached] +=
-        carry_correct;
-    results->both_correct[input1_cached][input2_cached][carry_in_cached] +=
-        sum_correct && carry_correct;
-}
-
-static void report_full_adder_accuracy(
-    const struct full_adder_accuracy_results *results,
-    int input1_cached,
-    int input2_cached,
-    int carry_in_cached)
-{
-    int input_sum = input1_cached + input2_cached + carry_in_cached;
-    int expected_sum = input_sum % 2;
-    int expected_carry = input_sum >= 2;
-    int total = results->totals[input1_cached][input2_cached][carry_in_cached];
-
-    printf("Inputs (%s, %s), carry-in %s, expected sum %s, carry %s:\n",
-           input1_cached ? "cached" : "uncached",
-           input2_cached ? "cached" : "uncached",
-           carry_in_cached ? "cached" : "uncached",
-           expected_sum ? "cached" : "uncached",
-           expected_carry ? "cached" : "uncached");
-    print_rate(
-        "Sum correct",
-        results->sum_correct[input1_cached][input2_cached][carry_in_cached],
-        total);
-    print_rate(
-        "Carry correct",
-        results->carry_correct[input1_cached][input2_cached][carry_in_cached],
-        total);
-    print_rate(
-        "Both correct",
-        results->both_correct[input1_cached][input2_cached][carry_in_cached],
-        total);
-}
-
-static int test_full_adder(void)
-{
-    int return_code = EXIT_FAILURE;
-    struct full_adder_memory memory = {0};
-    struct full_adder_accuracy_results results = {0};
-    uintptr_t trash = 0;
-
-    if (!allocate_full_adder_memory(&memory)) {
-        perror("aligned_alloc");
-        goto cleanup;
-    }
-
-    for (int trial = 0; trial < WARMUP_TRIALS; ++trial) {
-        struct full_adder_outputs outputs;
-        trash = run_full_adder_trial(&memory, rand() % 2, rand() % 2,
-                                     rand() % 2, trash, &outputs);
-    }
-
-    for (int trial = 0; trial < TRIALS; ++trial) {
-        int input1_cached = rand() % 2;
-        int input2_cached = rand() % 2;
-        int carry_in_cached = rand() % 2;
-        struct full_adder_outputs outputs;
-
-        trash = run_full_adder_trial(&memory, input1_cached, input2_cached,
-                                     carry_in_cached, trash, &outputs);
-        record_full_adder_result(&results, input1_cached, input2_cached,
-                                 carry_in_cached, &outputs);
-    }
-
-    printf("\nFull adder:\n");
-    for (int input1_cached = 0; input1_cached < 2; ++input1_cached) {
-        for (int input2_cached = 0; input2_cached < 2; ++input2_cached) {
-            for (int carry_in_cached = 0; carry_in_cached < 2;
-                 ++carry_in_cached) {
-                report_full_adder_accuracy(&results, input1_cached,
-                                           input2_cached, carry_in_cached);
-            }
-        }
-    }
-    return_code = EXIT_SUCCESS;
-
-cleanup:
-    free_full_adder_memory(&memory);
-    return return_code;
-}
-
 int main(void)
 {
     srand((unsigned int)time(NULL));
@@ -639,8 +462,7 @@ int main(void)
     if (test_fan2() != EXIT_SUCCESS
         || test_binary_gate("AND gate", and, and_operation) != EXIT_SUCCESS
         || test_binary_gate("OR gate", or, or_operation) != EXIT_SUCCESS
-        || test_half_adder() != EXIT_SUCCESS
-        || test_full_adder() != EXIT_SUCCESS) {
+        || test_half_adder() != EXIT_SUCCESS) {
         return EXIT_FAILURE;
     }
 

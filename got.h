@@ -36,6 +36,10 @@ uintptr_t full_adder_impl(volatile uintptr_t a, volatile uintptr_t b,
                           volatile uintptr_t sum,
                           volatile uintptr_t carry_out,
                           volatile uintptr_t trash);
+uintptr_t adder3_impl(const uintptr_t a[static 3],
+                      const uintptr_t b[static 3],
+                      const uintptr_t sum[static 3],
+                      volatile uintptr_t trash);
 
 void init(void);
 

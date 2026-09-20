@@ -393,7 +393,11 @@ uintptr_t or(uintptr_t input1, uintptr_t input2, uintptr_t output,
 }
 
 // similar to the github implementation linked to the paper
-uintptr_t half_adder_impl(volatile uintptr_t a, volatile uintptr_t b, volatile uintptr_t sum, volatile uintptr_t carry, volatile uintptr_t trash)
+uintptr_t half_adder_impl(volatile uintptr_t a,
+                          volatile uintptr_t b,
+                          volatile uintptr_t sum,
+                          volatile uintptr_t carry,
+                          volatile uintptr_t trash)
 {
     enum {
         A1,
@@ -422,14 +426,6 @@ uintptr_t half_adder_impl(volatile uintptr_t a, volatile uintptr_t b, volatile u
                                    + i * SIGNAL_STRIDE_BYTES);
     }
 
-    /*
-     * a1,a2 = FAN(a)
-     * b1,b2 = FAN(b)
-     * n1, n2 = NAND2(a1, b1)
-     * o = OR(a2, b2)
-     * sum = AND(n1, o)
-     * carry = NOT(n2)
-    */
     memory_flush((void *)temporary[A1]);
     memory_flush((void *)temporary[A2]);
     memory_fence();
@@ -488,7 +484,8 @@ uintptr_t half_adder_impl(volatile uintptr_t a, volatile uintptr_t b, volatile u
     return trash;
 }
 
-uintptr_t full_adder_impl(volatile uintptr_t a, volatile uintptr_t b,
+uintptr_t full_adder_impl(volatile uintptr_t a,
+                          volatile uintptr_t b,
                           volatile uintptr_t carry_in,
                           volatile uintptr_t sum,
                           volatile uintptr_t carry_out,
@@ -529,6 +526,50 @@ uintptr_t full_adder_impl(volatile uintptr_t a, volatile uintptr_t b,
                temporary[PROPAGATED_CARRY], carry_out, trash);
 
     memory_fence();
+    free(allocation);
+    return trash;
+}
+
+uintptr_t adder3_impl(const uintptr_t a[static 3],
+                      const uintptr_t b[static 3],
+                      const uintptr_t sum[static 3],
+                      volatile uintptr_t trash)
+{
+    enum {
+        CARRY0,
+        CARRY1,
+        DISCARDED_CARRY,
+        TEMPORARY_COUNT
+    };
+
+    void *allocation = aligned_alloc(PAGE_BYTES, PAGE_BYTES);
+    if (allocation == NULL) {
+        return trash;
+    }
+
+    memset(allocation, 0, PAGE_BYTES);
+
+    uintptr_t temporary[TEMPORARY_COUNT];
+    for (int i = 0; i < TEMPORARY_COUNT; ++i) {
+        temporary[i] = (uintptr_t)((char *)allocation
+                                   + ADDRESS_PADDING_BYTES
+                                   + i * SIGNAL_STRIDE_BYTES);
+    }
+
+    trash = half_adder_impl(a[0], b[0], sum[0], temporary[CARRY0], trash);
+
+    trash = full_adder_impl(a[1], b[1], temporary[CARRY0], sum[1], temporary[CARRY1], trash);
+
+    /* CARRY0 is no longer needed and is reused. */
+    trash = half_adder_impl(a[2], b[2], temporary[CARRY0], temporary[DISCARDED_CARRY], trash);
+
+    /* The discarded output can be reused because the gate flushes it. */
+    trash = half_adder_impl(temporary[CARRY0],
+                            temporary[CARRY1],
+                            sum[2],
+                            temporary[DISCARDED_CARRY],
+                            trash);
+
     free(allocation);
     return trash;
 }
