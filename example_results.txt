@@ -1,0 +1,154 @@
+cc   -std=gnu11 -Wall -Wextra -O1 -falign-functions=8 -fno-toplevel-reorder calibrate_threshold.c got.c \
+          -o calibrate_threshold.out
+cc   -std=gnu11 -Wall -Wextra -O2 task1.c got.c \
+          -o task1.out
+cc   -std=gnu11 -Wall -Wextra -O2 task2.c got.c \
+          -o task2.out
+cc   -std=gnu11 -Wall -Wextra -O1 -falign-functions=8 -fno-toplevel-reorder task3.c got.c \
+          -o task3.out
+cc   -std=gnu11 -Wall -Wextra -O1 -falign-functions=8 -fno-toplevel-reorder task4.c got.c \
+          -o task4.out
+cc   -std=gnu11 -Wall -Wextra -O1 -falign-functions=8 -fno-toplevel-reorder task5.c got.c \
+          -o task5.out
+cc   -std=gnu11 -Wall -Wextra -O1 -falign-functions=8 -fno-toplevel-reorder task6.c got.c \
+          -o task6.out
+cc   -std=gnu11 -Wall -Wextra -O1 -falign-functions=8 -fno-toplevel-reorder task7.c got.c \
+          -o task7.out
+taskset -c 0 ./calibrate_threshold.out
+=== Cache hit threshold calibration ===
+Cached:  median=60, p95=74 ticks
+Flushed: p05=236, median=304 ticks
+Cache errors: cached=0.12%, flushed=0.00%
+#define CACHE_HIT_THRESHOLD (155)
+
+=== Misprediction delay steps calibration ===
+NOT delay best results (23 steps): accuracy cached=100.00%, uncached=38.80%
+#define NOT_MISPREDICTION_DELAY_STEPS (23)
+
+=== NAND2 delay steps calibration ===
+NAND2 delay results (27 steps): joint accuracy uncached/uncached=91.20%, uncached/cached=89.90%, cached/uncached=90.40%, cached/cached=100.00%
+#define NAND2_MISPREDICTION_DELAY_STEPS (27)
+taskset -c 0 ./task1.out
+Cached: 100.00% success (4979/4979 correct)
+Uncached: 100.00% success (5021/5021 correct)
+taskset -c 0 ./task2.out
+branch1: 0.00% mispredictions detected (0/10000 cached after inverse condition)
+branch2: 0.65% mispredictions detected (65/10000 cached after inverse condition)
+taskset -c 0 ./task3.out
+not:
+  Cached input: 100.00% accuracy (50270/50270 correct)
+  Uncached input: 98.27% accuracy (48868/49730 correct)
+imul_not:
+  Cached input: 100.00% accuracy (50269/50270 correct)
+  Uncached input: 0.01% accuracy (6/49730 correct)
+imul_not2:
+  Cached input: 99.99% accuracy (50266/50270 correct)
+  Uncached input: 0.11% accuracy (53/49730 correct)
+taskset -c 0 ./task4.out
+Inputs (uncached, uncached), expected output cached: 97.59% accuracy (24457/25060 correct)
+Inputs (uncached, cached), expected output cached: 92.36% accuracy (23128/25040 correct)
+Inputs (cached, uncached), expected output cached: 97.09% accuracy (24240/24967 correct)
+Inputs (cached, cached), expected output uncached: 99.98% accuracy (24929/24933 correct)
+taskset -c 0 ./task5.out
+Inputs (uncached, uncached), expected outputs cached:
+  Output 1 correct: 87.89% (22026/25060)
+  Output 2 correct: 97.53% (24440/25060)
+  Both correct: 87.81% (22006/25060)
+  Outputs identical: 90.21% (22606/25060)
+Inputs (uncached, cached), expected outputs cached:
+  Output 1 correct: 85.77% (21477/25040)
+  Output 2 correct: 97.33% (24371/25040)
+  Both correct: 85.61% (21437/25040)
+  Outputs identical: 88.12% (22066/25040)
+Inputs (cached, uncached), expected outputs cached:
+  Output 1 correct: 86.32% (21551/24967)
+  Output 2 correct: 97.45% (24331/24967)
+  Both correct: 86.23% (21530/24967)
+  Outputs identical: 88.70% (22145/24967)
+Inputs (cached, cached), expected outputs uncached:
+  Output 1 correct: 100.00% (24933/24933)
+  Output 2 correct: 100.00% (24933/24933)
+  Both correct: 100.00% (24933/24933)
+  Outputs identical: 100.00% (24933/24933)
+taskset -c 0 ./task6.out
+FAN2 gate:
+Uncached input, expected outputs uncached:
+  Output 1 correct: 99.99% (50011/50014)
+  Output 2 correct: 99.99% (50008/50014)
+  Both correct: 99.99% (50008/50014)
+  Outputs identical: 99.99% (50011/50014)
+Cached input, expected outputs cached:
+  Output 1 correct: 92.35% (46162/49986)
+  Output 2 correct: 97.93% (48951/49986)
+  Both correct: 91.24% (45607/49986)
+  Outputs identical: 92.20% (46087/49986)
+
+AND gate:
+Inputs (uncached, uncached), expected output uncached: 99.99% (24888/24890)
+Inputs (uncached, cached), expected output uncached: 99.99% (25109/25111)
+Inputs (cached, uncached), expected output uncached: 99.99% (24913/24916)
+Inputs (cached, cached), expected output cached: 85.36% (21412/25083)
+
+OR gate:
+Inputs (uncached, uncached), expected output uncached: 100.00% (24966/24966)
+Inputs (uncached, cached), expected output cached: 87.43% (21783/24914)
+Inputs (cached, uncached), expected output cached: 90.06% (22622/25118)
+Inputs (cached, cached), expected output cached: 87.18% (21797/25002)
+
+Half adder:
+Inputs (uncached, uncached), expected sum uncached, carry uncached:
+  Sum correct: 99.95% (25098/25110)
+  Carry correct: 95.81% (24057/25110)
+  Both correct: 95.76% (24045/25110)
+Inputs (uncached, cached), expected sum cached, carry uncached:
+  Sum correct: 90.55% (22578/24933)
+  Carry correct: 95.70% (23861/24933)
+  Both correct: 90.55% (22577/24933)
+Inputs (cached, uncached), expected sum cached, carry uncached:
+  Sum correct: 90.32% (22709/25143)
+  Carry correct: 95.65% (24050/25143)
+  Both correct: 90.31% (22707/25143)
+Inputs (cached, cached), expected sum uncached, carry cached:
+  Sum correct: 99.70% (24739/24814)
+  Carry correct: 95.35% (23661/24814)
+  Both correct: 95.35% (23660/24814)
+taskset -c 0 ./task7.out
+Full adder:
+Inputs (uncached, uncached), carry-in uncached, expected sum uncached, carry uncached:
+  Sum correct: 99.52% (12251/12310)
+  Carry correct: 92.31% (11363/12310)
+  Both correct: 91.96% (11320/12310)
+Inputs (uncached, uncached), carry-in cached, expected sum cached, carry uncached:
+  Sum correct: 68.00% (8589/12630)
+  Carry correct: 92.09% (11631/12630)
+  Both correct: 67.03% (8466/12630)
+Inputs (uncached, cached), carry-in uncached, expected sum cached, carry uncached:
+  Sum correct: 64.96% (8245/12693)
+  Carry correct: 91.93% (11669/12693)
+  Both correct: 64.83% (8229/12693)
+Inputs (uncached, cached), carry-in cached, expected sum uncached, carry cached:
+  Sum correct: 96.35% (12092/12550)
+  Carry correct: 71.22% (8938/12550)
+  Both correct: 70.37% (8832/12550)
+Inputs (cached, uncached), carry-in uncached, expected sum cached, carry uncached:
+  Sum correct: 64.88% (8185/12616)
+  Carry correct: 92.55% (11676/12616)
+  Both correct: 64.76% (8170/12616)
+Inputs (cached, uncached), carry-in cached, expected sum uncached, carry cached:
+  Sum correct: 95.73% (11761/12286)
+  Carry correct: 70.53% (8665/12286)
+  Both correct: 69.68% (8561/12286)
+Inputs (cached, cached), carry-in uncached, expected sum uncached, carry cached:
+  Sum correct: 99.53% (12377/12436)
+  Carry correct: 76.33% (9492/12436)
+  Both correct: 76.18% (9474/12436)
+Inputs (cached, cached), carry-in cached, expected sum cached, carry cached:
+  Sum correct: 66.14% (8253/12479)
+  Carry correct: 73.58% (9182/12479)
+  Both correct: 60.42% (7540/12479)
+
+Three-bit adder:
+  Exact sum correct: 57.31% (57307/100000)
+  Sum bit 0 correct: 82.81% (82808/100000)
+  Sum bit 1 correct: 74.85% (74854/100000)
+  Sum bit 2 correct: 73.17% (73165/100000)

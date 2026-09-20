@@ -21,6 +21,7 @@
 
 int64_t SLOW_PARAM = 13;
 static int predictor_training_input = 1;
+static volatile int nand2_training_repetitions = 2;
 
 void clear(int *ptr)
 {
@@ -169,30 +170,8 @@ void nand(int *in1, int *in2, int *out)
     set(address);
 }
 
-// nand with two outputs = fan out of 2.
-void nand2(int *in1, int *in2, int *out1, int *out2)
-{
-    for (int i = 0; i < 256; ++i)
-        asm("" ::: "memory");
-
-    memory_fence();
-
-    if (*(volatile int *)in1 + *(volatile int *)in2 == 0) {
-        return;
-    }
-
-    int *volatile address1 = out1;
-    int *volatile address2 = out2;
-    volatile int offset = 0;
-
-    for (int i = 0; i < NAND2_MISPREDICTION_DELAY_STEPS; ++i) {
-        address1 += offset;
-        address2 += offset;
-    }
-
-    set(address1);
-    set(address2);
-}
+// Preserve the addresses of the gates that followed nand2.
+asm(".space 112, 0x90");
 
 uintptr_t fan2_impl(uintptr_t in,
                     uintptr_t out1,
@@ -444,18 +423,11 @@ uintptr_t half_adder_impl(volatile uintptr_t a,
     memory_flush((void *)temporary[N2]);
     memory_fence();
 
-    nand2(&predictor_training_input, &predictor_training_input,
-          (int *)temporary[TRAINING_OUTPUT1],
-          (int *)temporary[TRAINING_OUTPUT2]);
-    nand2(&predictor_training_input, &predictor_training_input,
-          (int *)temporary[TRAINING_OUTPUT1],
-          (int *)temporary[TRAINING_OUTPUT2]);
-    nand2(&predictor_training_input, &predictor_training_input,
-          (int *)temporary[TRAINING_OUTPUT1],
-          (int *)temporary[TRAINING_OUTPUT2]);
-    nand2(&predictor_training_input, &predictor_training_input,
-          (int *)temporary[TRAINING_OUTPUT1],
-          (int *)temporary[TRAINING_OUTPUT2]);
+    for (int training = 0; training < nand2_training_repetitions; ++training) {
+        nand2(&predictor_training_input, &predictor_training_input,
+              (int *)temporary[TRAINING_OUTPUT1],
+              (int *)temporary[TRAINING_OUTPUT2]);
+    }
     nand2((int *)temporary[A1], (int *)temporary[B1],
           (int *)temporary[N1], (int *)temporary[N2]);
 
@@ -579,4 +551,30 @@ void init(void)
     /* ramping up CPU */
     uint64_t start = read_clock();
     while (read_clock() - start < clock_ticks_per_second()) ;
+}
+
+// nand with two outputs = fan out of 2.
+__attribute__((aligned(128)))
+void nand2(int *in1, int *in2, int *out1, int *out2)
+{
+    for (int i = 0; i < 256; ++i)
+        asm("" ::: "memory");
+
+    memory_fence();
+
+    if (*(volatile int *)in1 + *(volatile int *)in2 == 0) {
+        return;
+    }
+
+    int *volatile address1 = out1;
+    int *volatile address2 = out2;
+    volatile int offset = 0;
+
+    for (int i = 0; i < NAND2_MISPREDICTION_DELAY_STEPS; ++i) {
+        address1 += offset;
+        address2 += offset;
+    }
+
+    set(address1);
+    set(address2);
 }

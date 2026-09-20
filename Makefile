@@ -9,7 +9,7 @@ LDLIBS ?=
 
 COMMON_CFLAGS := -std=gnu11 -Wall -Wextra
 EARLY_TASK_CFLAGS := -O2
-GATE_CFLAGS := -O1 -falign-functions=8
+GATE_CFLAGS := -O1 -falign-functions=8 -fno-toplevel-reorder
 
 TASK_NAMES := task1 task2 task3 task4 task5 task6 task7
 EARLY_PROGRAMS := task1.out task2.out
