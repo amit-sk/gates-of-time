@@ -4,12 +4,37 @@ Undergraduate's project in micro-architectural attacks and weird gates.
 
 ## Table of contents
 
+- [Building and running](#building-and-running)
 - [Calibration](#calibration)
 - [Basic operations](#basic-operations)
 - [Testing Mispredictions](#testing-mispredictions)
 - [NOT gate](#not-gate)
 - [NAND gate](#nand-gate)
 - [NAND2 gate](#nand2-gate)
+- [Additional gates and half adder](#additional-gates-and-half-adder)
+- [Full and three-bit adders](#full-and-three-bit-adders)
+
+`example_results.txt` contains the complete output from a representative
+`make run-all` execution pinned to CPU 0.
+
+## Building and running
+
+Build the calibration program and all task programs:
+
+```bash
+make
+```
+
+Build and run the complete suite on CPU 0:
+
+```bash
+make run-all
+```
+
+Use targets such as `make run-task3` to run an individual task and
+`make run-calibration` to run calibration. Set `CPU` to select another available
+CPU, for example `make CPU=2 run-all`. The Makefile supplies the required
+optimization and function-layout flags for each program.
 
 ## Calibration
 
@@ -27,7 +52,7 @@ NAND2 uses the separate `NAND2_MISPREDICTION_DELAY_STEPS` constant. See below.
 Copy the printed `#define` values into `consts.h`, then recompile and rerun.
 
 ```bash
-cc -O1 -falign-functions=8 -std=gnu11 calibrate_threshold.c got.c -o calibrate_threshold.out && taskset -c 0 ./calibrate_threshold.out
+make run-calibration
 ```
 
 Pin calibration and gate experiments to the same available CPU. Recalibrate after
@@ -37,24 +62,24 @@ Example output from a run pinned to CPU 0:
 
 ```text
 === Cache hit threshold calibration ===
-Cached:  median=42, p95=44 ticks
-Flushed: p05=200, median=204 ticks
-Cache errors: cached=0.00%, flushed=0.00%
-#define CACHE_HIT_THRESHOLD (122)
+Cached:  median=60, p95=74 ticks
+Flushed: p05=236, median=304 ticks
+Cache errors: cached=0.12%, flushed=0.00%
+#define CACHE_HIT_THRESHOLD (155)
 
 === Misprediction delay steps calibration ===
-NOT delay best results (28 steps): accuracy cached=100.00%, uncached=90.60%
-#define NOT_MISPREDICTION_DELAY_STEPS (28)
+NOT delay best results (23 steps): accuracy cached=100.00%, uncached=38.80%
+#define NOT_MISPREDICTION_DELAY_STEPS (23)
 
 === NAND2 delay steps calibration ===
-NAND2 delay results (30 steps): joint accuracy uncached/uncached=98.80%, uncached/cached=98.60%, cached/uncached=97.80%, cached/cached=100.00%
-#define NAND2_MISPREDICTION_DELAY_STEPS (30)
+NAND2 delay results (27 steps): joint accuracy uncached/uncached=91.20%, uncached/cached=89.90%, cached/uncached=90.40%, cached/cached=100.00%
+#define NAND2_MISPREDICTION_DELAY_STEPS (27)
 ```
 
 - `median`: middle timing; `p95` and `p05`: 95th and 5th percentiles.
 - `ticks`: timestamp-counter units, including measurement overhead.
 - Threshold: midpoint between cached `p95` and flushed `p05`
-  (`(44 + 200) / 2 = 122` here).
+  (`(74 + 236) / 2 = 155` here).
 - Cache errors: percentages of cached samples classified as uncached and flushed
   samples classified as cached.
 - NOT accuracy: correct outputs for cached and uncached **inputs**. A cached input
@@ -70,26 +95,15 @@ minimum accuracy. The runtime sweep can differ from compiled `not()`.
 NAND2 uses the separate `NAND2_MISPREDICTION_DELAY_STEPS` constant. Since its
 result is sensitive to compiled code placement, `calibrate_nand2_delay.py`
 rebuilds and runs the actual Task 5 binary for every candidate using temporary
-source copies. This command compares 28--30 with five runs per value on CPU 0:
+source copies. This command compares 26--28 with five runs per value on CPU 0:
 
 ```bash
-python3 calibrate_nand2_delay.py --min-steps 28 --max-steps 30 --runs 5 --cpu 0
+python3 calibrate_nand2_delay.py --min-steps 26 --max-steps 28 --runs 5 --cpu 0
 ```
 
-Example mean joint accuracies:
-
-```text
-Steps       UU       UC       CU       CC    Minimum
-   28    83.26%   81.99%   84.60%   99.99%     81.99%
-   29    83.86%   85.13%   82.32%   99.99%     82.32%
-   30    86.22%   84.33%   84.02%  100.00%     84.02%
-
-Best NAND2 delay: 30 steps
-#define NAND2_MISPREDICTION_DELAY_STEPS (30)
-```
-
-`UU`, `UC`, `CU`, and `CC` identify the two input cache states. `Minimum` is the
-lowest mean accuracy among them and is used to select the delay.
+The script prints mean joint accuracy for `UU`, `UC`, `CU`, and `CC`, which
+identify the two input cache states. It selects the delay with the highest
+minimum accuracy among the four states.
 
 ## Basic operations
 
@@ -100,14 +114,14 @@ and `test` (classify its cache state by load timing).
 choosing `set` or `clear` before checking the result with `test`.
 
 ```bash
-cc -O2 -std=c11 task1.c got.c -o task1.out && taskset -c 0 ./task1.out
+make run-task1
 ```
 
 The output reports success separately for cached and uncached trials:
 
 ```text
-Cached: 100.00% success (5054/5054 correct)
-Uncached: 100.00% success (4946/4946 correct)
+Cached: 100.00% success (4979/4979 correct)
+Uncached: 100.00% success (5021/5021 correct)
 ```
 
 ## Testing Mispredictions
@@ -118,7 +132,7 @@ and `branch2`. Each trial trains twice with `zero`, flushes `one`, then calls wi
 make recent branch history more consistent.
 
 ```bash
-cc -O2 -std=gnu11 task2.c got.c -o task2.out && taskset -c 0 ./task2.out
+make run-task2
 ```
 
 GNU C mode supports the supplied `asm` syntax. Use the same CPU as calibration.
@@ -126,8 +140,8 @@ GNU C mode supports the supplied `asm` syntax. Use the same CPU as calibration.
 Example output (rates vary by machine and run):
 
 ```text
-branch1: 0.01% mispredictions detected (1/10000 cached after inverse condition)
-branch2: 0.09% mispredictions detected (9/10000 cached after inverse condition)
+branch1: 0.00% mispredictions detected (0/10000 cached after inverse condition)
+branch2: 0.65% mispredictions detected (65/10000 cached after inverse condition)
 ```
 
 ## NOT gate
@@ -137,25 +151,25 @@ input cache states. It ramps up the CPU, trains the predictor, and reports
 cached- and uncached-input accuracy for each implementation.
 
 ```bash
-cc -O1 -falign-functions=8 -std=gnu11 task3.c got.c -o task3.out && taskset -c 0 ./task3.out
+make run-task3
 ```
 
-Use `-O1 -falign-functions=8` for the gate tests because optimization and
-function placement strongly affect the speculative behavior. The current
-`NOT_MISPREDICTION_DELAY_STEPS` value of 28 was calibrated with these flags.
+Use `-O1 -falign-functions=8 -fno-toplevel-reorder` for the gate tests because
+optimization and function placement strongly affect the speculative behavior.
+The Makefile supplies these flags for Tasks 3--7 and calibration.
 
 Expect three output blocks. Example output (rates vary by machine and run):
 
 ```text
 not:
-  Cached input: 100.00% accuracy (50049/50050 correct)
-  Uncached input: 91.91% accuracy (45907/49950 correct)
+  Cached input: 100.00% accuracy (50270/50270 correct)
+  Uncached input: 98.27% accuracy (48868/49730 correct)
 imul_not:
-  Cached input: 99.97% accuracy (50037/50050 correct)
-  Uncached input: 0.07% accuracy (34/49950 correct)
+  Cached input: 100.00% accuracy (50269/50270 correct)
+  Uncached input: 0.01% accuracy (6/49730 correct)
 imul_not2:
-  Cached input: 100.00% accuracy (50049/50050 correct)
-  Uncached input: 0.54% accuracy (268/49950 correct)
+  Cached input: 99.99% accuracy (50266/50270 correct)
+  Uncached input: 0.11% accuracy (53/49730 correct)
 ```
 
 Accuracy is reported separately for each input state: cached inputs should leave
@@ -168,19 +182,20 @@ trains the predictor before each invocation and reports accuracy separately for
 all four input cache-state combinations.
 
 ```bash
-cc -O1 -falign-functions=8 -std=gnu11 task4.c got.c -o task4.out && taskset -c 0 ./task4.out
+make run-task4
 ```
 
-The alignment flag `-falign-functions=8` gives `nand()` a branch-predictor-friendly placement on the
-tested machine. Results may change after modifying the source, compiler, or CPU.
+The alignment and ordering flags give `nand()` a branch-predictor-friendly
+placement on the tested machine. Results may change after modifying the source,
+compiler, or CPU.
 
 Example output (rates vary by machine and run):
 
 ```text
-Inputs (uncached, uncached), expected output cached: 96.52% accuracy (24008/24874 correct)
-Inputs (uncached, cached), expected output cached: 94.33% accuracy (23589/25006 correct)
-Inputs (cached, uncached), expected output cached: 95.45% accuracy (23897/25035 correct)
-Inputs (cached, cached), expected output uncached: 100.00% accuracy (25084/25085 correct)
+Inputs (uncached, uncached), expected output cached: 97.59% accuracy (24457/25060 correct)
+Inputs (uncached, cached), expected output cached: 92.36% accuracy (23128/25040 correct)
+Inputs (cached, uncached), expected output cached: 97.09% accuracy (24240/24967 correct)
+Inputs (cached, cached), expected output uncached: 99.98% accuracy (24929/24933 correct)
 ```
 
 Cached represents logical 1 and uncached represents logical 0. NAND should
@@ -196,7 +211,7 @@ randomized tests, trains the predictor four times before each measured call, and
 reports results for all four input combinations.
 
 ```bash
-cc -O1 -falign-functions=8 -std=gnu11 task5.c got.c -o task5.out && taskset -c 0 ./task5.out
+make run-task5
 ```
 
 Both outputs should be cached unless both inputs are cached. `Output 1 correct`
@@ -208,26 +223,148 @@ Example output with four training calls and the current 27-step delay:
 
 ```text
 Inputs (uncached, uncached), expected outputs cached:
-  Output 1 correct: 64.22% (15960/24852)
-  Output 2 correct: 65.64% (16314/24852)
-  Both correct: 63.53% (15789/24852)
-  Outputs identical: 97.20% (24156/24852)
+  Output 1 correct: 87.89% (22026/25060)
+  Output 2 correct: 97.53% (24440/25060)
+  Both correct: 87.81% (22006/25060)
+  Outputs identical: 90.21% (22606/25060)
 Inputs (uncached, cached), expected outputs cached:
-  Output 1 correct: 63.23% (15923/25183)
-  Output 2 correct: 64.83% (16326/25183)
-  Both correct: 62.18% (15659/25183)
-  Outputs identical: 96.30% (24252/25183)
+  Output 1 correct: 85.77% (21477/25040)
+  Output 2 correct: 97.33% (24371/25040)
+  Both correct: 85.61% (21437/25040)
+  Outputs identical: 88.12% (22066/25040)
 Inputs (cached, uncached), expected outputs cached:
-  Output 1 correct: 63.43% (15937/25127)
-  Output 2 correct: 65.26% (16398/25127)
-  Both correct: 62.45% (15691/25127)
-  Outputs identical: 96.21% (24174/25127)
+  Output 1 correct: 86.32% (21551/24967)
+  Output 2 correct: 97.45% (24331/24967)
+  Both correct: 86.23% (21530/24967)
+  Outputs identical: 88.70% (22145/24967)
 Inputs (cached, cached), expected outputs uncached:
-  Output 1 correct: 100.00% (24838/24838)
-  Output 2 correct: 100.00% (24838/24838)
-  Both correct: 100.00% (24838/24838)
-  Outputs identical: 100.00% (24838/24838)
+  Output 1 correct: 100.00% (24933/24933)
+  Output 2 correct: 100.00% (24933/24933)
+  Both correct: 100.00% (24933/24933)
+  Outputs identical: 100.00% (24933/24933)
 ```
 
 These rates are sensitive to the delay, predictor training, compiled code
 placement, CPU, and other system activity.
+
+`nand2()` is placed after the other gates and aligned to 128 bytes. The build
+uses `-fno-toplevel-reorder` to preserve that source order. The half adder uses
+two looped NAND2 training calls; the standalone Task 5 tester uses four.
+
+## Additional gates and half adder
+
+`task6.c` separately tests FAN2, AND, OR, and the half adder with 100,000
+randomized trials per test. FAN2 and the half adder report each output as well
+as joint correctness.
+
+```bash
+make run-task6
+```
+
+Example output:
+
+```text
+FAN2 gate:
+Uncached input, expected outputs uncached:
+  Output 1 correct: 99.99% (50011/50014)
+  Output 2 correct: 99.99% (50008/50014)
+  Both correct: 99.99% (50008/50014)
+  Outputs identical: 99.99% (50011/50014)
+Cached input, expected outputs cached:
+  Output 1 correct: 92.35% (46162/49986)
+  Output 2 correct: 97.93% (48951/49986)
+  Both correct: 91.24% (45607/49986)
+  Outputs identical: 92.20% (46087/49986)
+
+AND gate:
+Inputs (uncached, uncached), expected output uncached: 99.99% (24888/24890)
+Inputs (uncached, cached), expected output uncached: 99.99% (25109/25111)
+Inputs (cached, uncached), expected output uncached: 99.99% (24913/24916)
+Inputs (cached, cached), expected output cached: 85.36% (21412/25083)
+
+OR gate:
+Inputs (uncached, uncached), expected output uncached: 100.00% (24966/24966)
+Inputs (uncached, cached), expected output cached: 87.43% (21783/24914)
+Inputs (cached, uncached), expected output cached: 90.06% (22622/25118)
+Inputs (cached, cached), expected output cached: 87.18% (21797/25002)
+
+Half adder:
+Inputs (uncached, uncached), expected sum uncached, carry uncached:
+  Sum correct: 99.95% (25098/25110)
+  Carry correct: 95.81% (24057/25110)
+  Both correct: 95.76% (24045/25110)
+Inputs (uncached, cached), expected sum cached, carry uncached:
+  Sum correct: 90.55% (22578/24933)
+  Carry correct: 95.70% (23861/24933)
+  Both correct: 90.55% (22577/24933)
+Inputs (cached, uncached), expected sum cached, carry uncached:
+  Sum correct: 90.32% (22709/25143)
+  Carry correct: 95.65% (24050/25143)
+  Both correct: 90.31% (22707/25143)
+Inputs (cached, cached), expected sum uncached, carry cached:
+  Sum correct: 99.70% (24739/24814)
+  Carry correct: 95.35% (23661/24814)
+  Both correct: 95.35% (23660/24814)
+```
+
+For FAN2, `Both correct` requires both copies to match the input. For the half
+adder, it requires both sum and carry to match the expected logical values.
+
+## Full and three-bit adders
+
+`task7.c` tests the full adder for all eight combinations of two input bits and
+a carry-in. It then tests `adder3_impl()` with 100,000 random pairs of three-bit
+values. The three-bit result is computed modulo eight, so its final carry is
+discarded.
+
+```bash
+make run-task7
+```
+
+Example output:
+
+```text
+Full adder:
+Inputs (uncached, uncached), carry-in uncached, expected sum uncached, carry uncached:
+  Sum correct: 99.52% (12251/12310)
+  Carry correct: 92.31% (11363/12310)
+  Both correct: 91.96% (11320/12310)
+Inputs (uncached, uncached), carry-in cached, expected sum cached, carry uncached:
+  Sum correct: 68.00% (8589/12630)
+  Carry correct: 92.09% (11631/12630)
+  Both correct: 67.03% (8466/12630)
+Inputs (uncached, cached), carry-in uncached, expected sum cached, carry uncached:
+  Sum correct: 64.96% (8245/12693)
+  Carry correct: 91.93% (11669/12693)
+  Both correct: 64.83% (8229/12693)
+Inputs (uncached, cached), carry-in cached, expected sum uncached, carry cached:
+  Sum correct: 96.35% (12092/12550)
+  Carry correct: 71.22% (8938/12550)
+  Both correct: 70.37% (8832/12550)
+Inputs (cached, uncached), carry-in uncached, expected sum cached, carry uncached:
+  Sum correct: 64.88% (8185/12616)
+  Carry correct: 92.55% (11676/12616)
+  Both correct: 64.76% (8170/12616)
+Inputs (cached, uncached), carry-in cached, expected sum uncached, carry cached:
+  Sum correct: 95.73% (11761/12286)
+  Carry correct: 70.53% (8665/12286)
+  Both correct: 69.68% (8561/12286)
+Inputs (cached, cached), carry-in uncached, expected sum uncached, carry cached:
+  Sum correct: 99.53% (12377/12436)
+  Carry correct: 76.33% (9492/12436)
+  Both correct: 76.18% (9474/12436)
+Inputs (cached, cached), carry-in cached, expected sum cached, carry cached:
+  Sum correct: 66.14% (8253/12479)
+  Carry correct: 73.58% (9182/12479)
+  Both correct: 60.42% (7540/12479)
+
+Three-bit adder:
+  Exact sum correct: 57.31% (57307/100000)
+  Sum bit 0 correct: 82.81% (82808/100000)
+  Sum bit 1 correct: 74.85% (74854/100000)
+  Sum bit 2 correct: 73.17% (73165/100000)
+```
+
+`Both correct` requires the full adder's sum and carry to be correct in the same
+trial. `Exact sum correct` requires all three result bits to match; the per-bit
+rates show where errors accumulate across the composed circuit.
