@@ -11,12 +11,13 @@ COMMON_CFLAGS := -std=gnu11 -Wall -Wextra
 EARLY_TASK_CFLAGS := -O2
 GATE_CFLAGS := -O1 -falign-functions=8 -fno-toplevel-reorder
 
-TASK_NAMES := task1 task2 task3 task4 task5 task6 task7
+TASK_NAMES := task1 task2 task3 task4 task5 task6 task7 task8
 EARLY_PROGRAMS := task1.out task2.out
 GATE_PROGRAMS := task3.out task4.out task5.out task6.out task7.out calibrate_threshold.out
 CACHE_LEVEL_PROGRAM := cache_level_timings.out
 TASK_PROGRAMS := $(addsuffix .out,$(TASK_NAMES))
 PROGRAMS := $(TASK_PROGRAMS) calibrate_threshold.out
+GOT_PROGRAMS := $(EARLY_PROGRAMS) $(GATE_PROGRAMS)
 COMMON_DEPENDENCIES := got.c got.h consts.h arch_primitives.h
 CACHE_LEVEL_CSV ?= cache_level_timings.csv
 CACHE_LEVEL_SUMMARY ?= cache_level_thresholds.csv
@@ -42,11 +43,16 @@ $(TASK_NAMES): %: %.out
 $(EARLY_PROGRAMS): BUILD_CFLAGS := $(EARLY_TASK_CFLAGS)
 $(GATE_PROGRAMS): BUILD_CFLAGS := $(GATE_CFLAGS)
 
-$(PROGRAMS): %.out: %.c $(COMMON_DEPENDENCIES)
+$(GOT_PROGRAMS): %.out: %.c $(COMMON_DEPENDENCIES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(COMMON_CFLAGS) $(BUILD_CFLAGS) $< got.c \
 		$(LDFLAGS) $(LDLIBS) -o $@
 
-$(CACHE_LEVEL_PROGRAM): cache_level_timings.c cache_level.c cache_level.h arch_primitives.h
+task8.out: task8.c cache_level.c cache_level.h cache_level_thresholds.h arch_primitives.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(COMMON_CFLAGS) -O2 \
+		task8.c cache_level.c $(LDFLAGS) $(LDLIBS) -o $@
+
+$(CACHE_LEVEL_PROGRAM): cache_level_timings.c cache_level.c cache_level.h \
+		cache_level_thresholds.h arch_primitives.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(COMMON_CFLAGS) -O2 \
 		cache_level_timings.c cache_level.c $(LDFLAGS) $(LDLIBS) -o $@
 
@@ -73,6 +79,7 @@ run-all: all
 	$(TASKSET) -c $(CPU) ./task5.out
 	$(TASKSET) -c $(CPU) ./task6.out
 	$(TASKSET) -c $(CPU) ./task7.out
+	$(TASKSET) -c $(CPU) ./task8.out
 
 clean:
 	$(RM) $(PROGRAMS) $(CACHE_LEVEL_PROGRAM)

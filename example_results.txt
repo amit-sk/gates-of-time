@@ -14,6 +14,8 @@ cc   -std=gnu11 -Wall -Wextra -O1 -falign-functions=8 -fno-toplevel-reorder task
           -o task6.out
 cc   -std=gnu11 -Wall -Wextra -O1 -falign-functions=8 -fno-toplevel-reorder task7.c got.c \
           -o task7.out
+cc   -std=gnu11 -Wall -Wextra -O2 \
+          task8.c cache_level.c   -o task8.out
 taskset -c 0 ./calibrate_threshold.out
 === Cache hit threshold calibration ===
 Cached:  median=60, p95=74 ticks
@@ -152,3 +154,12 @@ Three-bit adder:
   Sum bit 0 correct: 82.81% (82808/100000)
   Sum bit 1 correct: 74.85% (74854/100000)
   Sum bit 2 correct: 73.17% (73165/100000)
+taskset -c 0 ./task8.out
+CPU 0: L1d=48 KiB, L2=1280 KiB, LLC=24576 KiB
+Prepared-state agreement (rows expected, columns returned):
+expected     uncached         L1         L2        LLC    agreement
+uncached         2262         43         11        184      90.48%
+L1                  0       2414         86          0      96.56%
+L2                  1         10       2466         23      98.64%
+LLC               545          0         16       1939      77.56%
+Overall: 90.81% agreement (9081/10000)
