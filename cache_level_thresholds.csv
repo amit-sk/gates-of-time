@@ -1,0 +1,2 @@
+input_csv,fit_samples,validation_samples,l1_max_ticks,l2_max_ticks,llc_max_ticks,fit_misclassified,fit_accuracy,validation_misclassified,validation_accuracy
+cache_level_timings.csv,10000,10000,72,132,240,695,0.930500,710,0.929000

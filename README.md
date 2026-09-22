@@ -13,6 +13,7 @@ Undergraduate's project in micro-architectural attacks and weird gates.
 - [NAND2 gate](#nand2-gate)
 - [Additional gates and half adder](#additional-gates-and-half-adder)
 - [Full and three-bit adders](#full-and-three-bit-adders)
+- [Cache-level timing study](#cache-level-timing-study)
 
 `example_results.txt` contains the complete output from a representative
 `make run-all` execution pinned to CPU 0.
@@ -368,3 +369,61 @@ Three-bit adder:
 `Both correct` requires the full adder's sum and carry to be correct in the same
 trial. `Exact sum correct` requires all three result bits to match; the per-bit
 rates show where errors accumulate across the composed circuit.
+
+## Cache-level timing study
+
+`cache_level_timings.c` measures whether load latency can distinguish L1, L2,
+LLC, and uncached memory and produces calibration data for `cacheLevel()`. It
+pins itself to one CPU, warms up the CPU, and writes every measurement to
+`cache_level_timings.csv`.
+
+Run the measurement and analysis with:
+
+```bash
+make run-cache-level-timings && make analyze-cache-levels
+```
+
+The experiment collects two kinds of samples. Prepared-state samples load one
+target directly for L1, walk four times the L1 or L2 capacity to attempt to
+leave it in L2 or LLC, or flush it for the uncached state. Random working-set
+samples use dependent pointer cycles of 24 KiB, 640 KiB, 12 MiB, and 96 MiB on
+the current machine. The dependency prevents ordinary hardware prefetching.
+
+`analyze_cache_levels.py` fits three ordered thresholds on the even-numbered
+prepared samples, choosing the thresholds with the fewest classification
+errors. It evaluates those thresholds on the unused odd-numbered samples. The
+current representative run produced:
+
+| Intended state | Median | p95 | Validation accuracy |
+| --- | ---: | ---: | ---: |
+| L1 | 58 ticks | 76 ticks | 94.36% |
+| L2 | 78 ticks | 116 ticks | 97.04% |
+| LLC | 160 ticks | 406 ticks | 80.20% |
+| Uncached | 340 ticks | 652 ticks | 100.00% |
+
+The fitted thresholds classify measurements at most 72 ticks as L1, 73--132
+as L2, 133--240 as LLC, and values above 240 as uncached. Overall validation
+agreement was 92.90%.
+
+This percentage is agreement with the state the test attempted to prepare, not
+independently verified cache-level accuracy. Loading and flushing give strong
+L1 and uncached labels, but capacity walks only approximate L2 and LLC state.
+The largest error source is the overlap between the LLC tail and uncached
+memory. Thresholds also move between runs, so they should be calibrated for the
+same machine, CPU, and timing sequence used by `cacheLevel()`.
+
+`cache_level_histogram.svg` contains two panels. In the prepared-state panel,
+the horizontal axis is serialized load time in timestamp-counter ticks, the
+vertical axis is the fraction of samples in each two-tick bin, and the dashed
+lines are the fitted thresholds. Blue represents L1, green L2, orange LLC, and
+red uncached memory. Overlap between distributions shows where classification
+is ambiguous. The working-set panel shows random access latency as the
+footprint grows; these footprint sizes are not ground-truth cache-level labels
+and are not included in the accuracy calculation. Random accesses also include
+TLB misses and shared-cache contention.
+
+The plot stops at the 99.5th percentile so rare interruptions do not compress
+the useful portion of the graph. Its legends count values beyond that limit,
+while the raw CSV retains every sample. The reported ticks include timer and
+fence overhead and are not bare load cycles. `cache_level_thresholds.csv`
+contains the selected thresholds and fitting and validation error counts.
