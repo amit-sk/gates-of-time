@@ -372,6 +372,39 @@ rates show where errors accumulate across the composed circuit.
 
 ## Cache-level timing study
 
+`cache_level.c` implements `cacheLevel(ptr)` with one serialized load. It
+returns 1 for L1, 2 for L2, 3 for LLC, and 0 for an uncached line. The calibrated
+limits in `cache_level_thresholds.h` are 72, 132, and 240 ticks. The measurement
+loads the line into L1, so the function cannot repeat the probe or use a
+majority vote.
+
+> **Calibrate before changing the CPU or machine.** Run
+> `make CPU=N run-cache-level-timings && make analyze-cache-levels`, copy the
+> three fitted limits into `cache_level_thresholds.h`, then run
+> `make CPU=N run-task8`. Calibration and testing must use the same CPU.
+
+`task8.c` runs 10,000 fresh calls to `cacheLevel()`, with 2,500 intended samples
+for every state. It shuffles the states, varies the target page and cache-set
+offset, and reports a confusion matrix. These trials are separate from the data
+used to fit the thresholds.
+
+```bash
+make run-task8
+```
+
+Representative output from CPU 0 (rates vary between runs):
+
+```text
+CPU 0: L1d=48 KiB, L2=1280 KiB, LLC=24576 KiB
+Prepared-state agreement (rows expected, columns returned):
+expected     uncached         L1         L2        LLC    agreement
+uncached         2262         43         11        184      90.48%
+L1                  0       2414         86          0      96.56%
+L2                  1         10       2466         23      98.64%
+LLC               545          0         16       1939      77.56%
+Overall: 90.81% agreement (9081/10000)
+```
+
 `cache_level_timings.c` measures whether load latency can distinguish L1, L2,
 LLC, and uncached memory and produces calibration data for `cacheLevel()`. It
 pins itself to one CPU, warms up the CPU, and writes every measurement to
