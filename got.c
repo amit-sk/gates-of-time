@@ -76,18 +76,7 @@ void imul_not(int *in, int *out)
         return;
     }
 
-    int *address = out;
-    unsigned long multiplier = 1;
-
-    asm volatile(
-        ".rept %c[steps]\n\t"
-        "imulq %[multiplier], %[address]\n\t"
-        ".endr\n\t"
-        : [address] "+&r" (address)
-        : [multiplier] "r" (multiplier),
-          [steps] "i" (NOT_MISPREDICTION_DELAY_STEPS)
-        : "cc", "memory"
-    );
+    int *address = instructions_delay(out, NOT_MISPREDICTION_DELAY_STEPS);
 
     set(address);
 }

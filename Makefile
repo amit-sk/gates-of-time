@@ -1,4 +1,11 @@
-CC ?= cc
+UNAME_S := $(shell uname -s)
+
+ifeq ($(UNAME_S),Darwin)
+	CC ?= clang
+else
+	CC ?= gcc
+endif
+
 CPU ?= 0
 TASKSET ?= taskset
 

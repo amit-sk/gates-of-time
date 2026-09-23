@@ -4,6 +4,15 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
+/*
+ * Burn a tuned amount of time by chaining `steps` dependent multiplies on
+ * `address`. The multiplier is 1 so the value is preserved, but the compiler
+ * cannot see that (without optimization), so each multiply must wait for the
+ * previous result -- the chain length sets the latency. `steps` must be a
+ * compile-time constant.
+ */
+__attribute__((always_inline)) static inline void *instructions_delay(void *address, int steps);
+
 #if defined(__x86_64__) || defined(_M_X64)
 
 #include <x86intrin.h>
@@ -29,11 +38,35 @@ static inline uint64_t clock_ticks_per_second(void)
     return 1000000000ULL;
 }
 
+static inline void *instructions_delay(void *address, int steps)
+{
+    unsigned long multiplier = 1;
+
+    asm volatile(
+        ".rept %c[steps]\n\t"
+        "imulq %[multiplier], %[address]\n\t"
+        ".endr\n\t"
+        : [address] "+&r" (address)
+        : [multiplier] "r" (multiplier),
+          [steps] "i" (steps)
+        : "cc", "memory"
+    );
+
+    return address;
+}
+
 #elif defined(__aarch64__) || defined(__arm64__)
 
 static inline void memory_flush(const void *ptr)
 {
-#error "memory_flush needs to be implemented for aarch64"
+    asm volatile(
+        "dc civac, %0\n"
+        "dsb ish\n"
+        "isb\n"
+        :
+        : "r"(ptr)
+        : "memory"
+    );
 }
 
 static inline uint64_t read_clock(void)
@@ -71,6 +104,23 @@ static inline uint64_t clock_ticks_per_second(void)
     );
 
     return frequency;
+}
+
+static inline void *instructions_delay(void *address, int steps)
+{
+    unsigned long multiplier = 1;
+
+    asm volatile(
+        ".rept %c[steps]\n\t"
+        "mul %[address], %[address], %[multiplier]\n\t"
+        ".endr\n\t"
+        : [address] "+&r" (address)
+        : [multiplier] "r" (multiplier),
+          [steps] "i" (steps)
+        : "cc", "memory"
+    );
+
+    return address;
 }
 
 #else
