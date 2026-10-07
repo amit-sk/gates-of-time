@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "arch_primitives.h"
+#include "consts.h"
 #include "got.h"
 
 #define TRIALS 10000
@@ -42,8 +43,10 @@ static void test_branch(const char *name, void (*branch)(int *, int *))
     }
 
     for (int i = 0; i < TRIALS; ++i) {
-        branch(&zero, line);
-        branch(&zero, line);
+        for (int training = 0; training < PREDICTOR_TRAINING_RUNS;
+             ++training) {
+            branch(&zero, line);
+        }
         clear(&one);
         branch(&one, line);
         mispredictions += (test(line) == 1);

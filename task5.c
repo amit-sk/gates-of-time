@@ -4,6 +4,7 @@
 #include <time.h>
 
 #include "arch_primitives.h"
+#include "consts.h"
 #include "got.h"
 
 #define TRIALS 100000
@@ -43,10 +44,10 @@ static int predictor_training_input = 1;
 static void run_nand2(int *input1, int *input2, int *output1, int *output2,
                       int *training_output1, int *training_output2)
 {
-    nand2(&predictor_training_input, &predictor_training_input, training_output1, training_output2);
-    nand2(&predictor_training_input, &predictor_training_input, training_output1, training_output2);
-    nand2(&predictor_training_input, &predictor_training_input, training_output1, training_output2);
-    nand2(&predictor_training_input, &predictor_training_input, training_output1, training_output2);
+    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training) {
+        nand2(&predictor_training_input, &predictor_training_input,
+              training_output1, training_output2);
+    }
     nand2(input1, input2, output1, output2);
 }
 

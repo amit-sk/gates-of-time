@@ -166,8 +166,10 @@ static struct delay_result measure_delay(int *input, int *output, int delay_step
 
     for (int trial = 0; trial < DELAY_TRIAL_COUNT; ++trial) {
         for (int input_cached = 0; input_cached < 2; ++input_cached) {
-            gate(&training_condition, output, delay_steps);
-            gate(&training_condition, output, delay_steps);
+            for (int training = 0; training < PREDICTOR_TRAINING_RUNS;
+                 ++training) {
+                gate(&training_condition, output, delay_steps);
+            }
 
             memory_flush(input);
             memory_flush(output);
@@ -300,14 +302,10 @@ static void run_nand2_with_training(
 {
     static int training_input = 1;
 
-    nand2(&training_input, &training_input, memory->training_output1,
-          memory->training_output2);
-    nand2(&training_input, &training_input, memory->training_output1,
-          memory->training_output2);
-    nand2(&training_input, &training_input, memory->training_output1,
-          memory->training_output2);
-    nand2(&training_input, &training_input, memory->training_output1,
-          memory->training_output2);
+    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training) {
+        nand2(&training_input, &training_input, memory->training_output1,
+              memory->training_output2);
+    }
     nand2(memory->input1, memory->input2, memory->output1, memory->output2);
 }
 
