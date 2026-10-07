@@ -5,7 +5,6 @@
 #include <time.h>
 
 #include "arch_primitives.h"
-#include "consts.h"
 #include "got.h"
 
 #define TRIALS 100000
@@ -41,8 +40,10 @@ static int predictor_training_input = 1;
 static uintptr_t run_not(int *input, int *output, int *training_output,
                          uintptr_t trash)
 {
-    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training)
-        not(&predictor_training_input, training_output);
+    not(&predictor_training_input, training_output);
+    not(&predictor_training_input, training_output);
+    not(&predictor_training_input, training_output);
+    not(&predictor_training_input, training_output);
     not(input, output);
     return trash;
 }
@@ -50,8 +51,10 @@ static uintptr_t run_not(int *input, int *output, int *training_output,
 static uintptr_t run_imul_not(int *input, int *output, int *training_output,
                               uintptr_t trash)
 {
-    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training)
-        imul_not(&predictor_training_input, training_output);
+    imul_not(&predictor_training_input, training_output);
+    imul_not(&predictor_training_input, training_output);
+    imul_not(&predictor_training_input, training_output);
+    imul_not(&predictor_training_input, training_output);
     imul_not(input, output);
     return trash;
 }

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Skip one gate's delay in an exact, verified existing PIE task binary.
 
-This intentionally supports only the six instruction layouts audited for the
-2026-10-07 GCC build. A different compiler/layout fails its hash check.
+Supports the audited 200-training and pre-6268503 training builds from
+2026-10-07. A different compiler/layout fails its whole-binary hash check.
 """
 
 import hashlib
@@ -28,11 +28,27 @@ PATCHES = {
            "ffff4cdaa53600323e90e7bd440d0ca8ddae9c0e00c52ab60a9f8828c7127b0d"),
 }
 
+PRE_6268503_PATCHES = {
+    "not": (3, "not", 0x4000, 0x401F, 0x4045, PATCHES["not"][5]),
+    "nand": (4, "nand", 0x7C98, 0x7CB9, 0x7CDF, PATCHES["nand"][5]),
+    "nand2": (5, "nand2", 0x8C80, 0x8CA6, 0x8CE0, PATCHES["nand2"][5]),
+    "fan2": (6, "fan2_impl", 0x7D58, 0x7E2D, 0x7E7E, PATCHES["fan2"][5]),
+    "and": (6, "and_gate_impl", 0x80B8, 0x819E, 0x81C3, PATCHES["and"][5]),
+    "or": (6, "or_gate_impl", 0x83F8, 0x84E8, 0x8515, PATCHES["or"][5]),
+}
+
 BASELINE_SHA256 = {
     3: "0aa4a93bcf6f6698d698c48fd1287284bd6d0faab7275030024f62d04f03d48f",
     4: "406f46330cf3ef34cfab6b5faa460e75aaa3a2237aa41e3061e67550a99eb722",
     5: "b3a369019eda504fc4412e60613f4f7c62af98740b0cbe8feed4d5fc5af266a1",
     6: "8b3e81ea22840d238158f0224a057485ecf7b9ad2583b70a224ab16a4499ad6d",
+}
+
+PRE_6268503_BASELINE_SHA256 = {
+    3: "c800787cbbcccbc205a603747866e3ffe3db3150eaf4e160c853107b77671d76",
+    4: "8981906ea793493235563dd4bcf1f1aa1c2dde7b01691480d030b8e097eadaa6",
+    5: "6d10af18529bdd49bcf4d6d6499821f3b3b1f5792a389c5924aa38c3c42d360d",
+    6: "4d88a732150c29d8ac5a544faf216adf948c0d23da0697e325680449f47385fc",
 }
 
 
@@ -62,15 +78,21 @@ def main() -> int:
         print("GATE is not, nand, nand2, fan2, and, or", file=sys.stderr)
         return 2
     gate, baseline, output = sys.argv[1], Path(sys.argv[2]), Path(sys.argv[3])
-    task, symbol, symbol_vma, start, end, expected_hash = PATCHES[gate]
+    task = PATCHES[gate][0]
     if baseline.name != f"task{task}.out":
         raise ValueError(f"{gate} requires task{task}.out")
     if baseline.resolve() == output.resolve():
         raise ValueError("output must differ from baseline")
 
     original = baseline.read_bytes()
-    if hashlib.sha256(original).hexdigest() != BASELINE_SHA256[task]:
+    whole_hash = hashlib.sha256(original).hexdigest()
+    if whole_hash == BASELINE_SHA256[task]:
+        profile, patch = "200-training", PATCHES[gate]
+    elif whole_hash == PRE_6268503_BASELINE_SHA256[task]:
+        profile, patch = "pre-6268503", PRE_6268503_PATCHES[gate]
+    else:
         raise ValueError("whole baseline binary differs from the audited build")
+    task, symbol, symbol_vma, start, end, expected_hash = patch
     offset = executable_file_offset(original, start, end)
     length = end - start
     span = original[offset:offset + length]
@@ -96,7 +118,7 @@ def main() -> int:
     output.chmod(baseline.stat().st_mode & 0o777)
     if symbols(output) != original_symbols:
         raise AssertionError("ELF symbols changed")
-    print(f"{gate}: {symbol}@{symbol_vma:#x}; skipped [{start:#x},{end:#x}); "
+    print(f"{profile} {gate}: {symbol}@{symbol_vma:#x}; skipped [{start:#x},{end:#x}); "
           f"file size and all bytes outside the delay span unchanged")
     return 0
 
