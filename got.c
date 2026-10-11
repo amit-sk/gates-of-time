@@ -21,7 +21,6 @@
 
 int64_t SLOW_PARAM = 13;
 static int predictor_training_input = 1;
-static volatile int nand2_training_repetitions = 2;
 
 void clear(int *ptr)
 {
@@ -141,10 +140,9 @@ uintptr_t imul_not2(uintptr_t in, uintptr_t out, uintptr_t trash)
     _Alignas(64) uintptr_t fake[4] = {0};
     uintptr_t fake_address = (uintptr_t)fake;
 
-    trash = imul_not2_impl(fake_address, fake_address, false, trash);
-    trash = imul_not2_impl(fake_address, fake_address, false, trash);
-    trash = imul_not2_impl(fake_address, fake_address, false, trash);
-    trash = imul_not2_impl(fake_address, fake_address, false, trash);
+    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training) {
+        trash = imul_not2_impl(fake_address, fake_address, false, trash);
+    }
     trash = imul_not2_impl(in, out, true, trash);
 
     return trash;
@@ -233,10 +231,8 @@ uintptr_t fan2(uintptr_t in, uintptr_t out1, uintptr_t out2,
     _Alignas(64) unsigned char fake_storage[256] = {0};
     uintptr_t fake = (uintptr_t)(fake_storage + 128);
 
-    trash = fan2_impl(fake, fake, fake, false, trash);
-    trash = fan2_impl(fake, fake, fake, false, trash);
-    trash = fan2_impl(fake, fake, fake, false, trash);
-    trash = fan2_impl(fake, fake, fake, false, trash);
+    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training)
+        trash = fan2_impl(fake, fake, fake, false, trash);
     return fan2_impl(in, out1, out2, true, trash);
 }
 
@@ -268,6 +264,10 @@ uintptr_t and_gate_impl(uintptr_t input1,
     double divide_by = wet_run + 1;
     double result = start / divide_by;
 
+    // the condition to be mispredicted.
+    // if wet_run is true, this should return, but is trained not to.
+    // below, the output is accessed (depending on the inputs), so if
+    // they are cached-in, it will be fast, and the output will be cached-in.
     if (result == denormal_result) {
         return trash;
     }
@@ -297,10 +297,8 @@ uintptr_t and(uintptr_t input1, uintptr_t input2, uintptr_t output, uintptr_t tr
     _Alignas(64) unsigned char fake_storage[256] = {0};
     uintptr_t fake = (uintptr_t)(fake_storage + 128);
 
-    trash = and_gate_impl(fake, fake, fake, false, trash);
-    trash = and_gate_impl(fake, fake, fake, false, trash);
-    trash = and_gate_impl(fake, fake, fake, false, trash);
-    trash = and_gate_impl(fake, fake, fake, false, trash);
+    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training)
+        trash = and_gate_impl(fake, fake, fake, false, trash);
     return and_gate_impl(input1, input2, output, true, trash);
 }
 
@@ -364,10 +362,8 @@ uintptr_t or(uintptr_t input1, uintptr_t input2, uintptr_t output,
     _Alignas(64) unsigned char fake_storage[256] = {0};
     uintptr_t fake = (uintptr_t)(fake_storage + 128);
 
-    trash = or_gate_impl(fake, fake, fake, false, trash);
-    trash = or_gate_impl(fake, fake, fake, false, trash);
-    trash = or_gate_impl(fake, fake, fake, false, trash);
-    trash = or_gate_impl(fake, fake, fake, false, trash);
+    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training)
+        trash = or_gate_impl(fake, fake, fake, false, trash);
     return or_gate_impl(input1, input2, output, true, trash);
 }
 
@@ -423,7 +419,7 @@ uintptr_t half_adder_impl(volatile uintptr_t a,
     memory_flush((void *)temporary[N2]);
     memory_fence();
 
-    for (int training = 0; training < nand2_training_repetitions; ++training) {
+    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training) {
         nand2(&predictor_training_input, &predictor_training_input,
               (int *)temporary[TRAINING_OUTPUT1],
               (int *)temporary[TRAINING_OUTPUT2]);
@@ -444,10 +440,9 @@ uintptr_t half_adder_impl(volatile uintptr_t a,
     memory_flush((void *)carry);
     memory_fence();
 
-    not(&predictor_training_input, (int *)temporary[TRAINING_OUTPUT1]);
-    not(&predictor_training_input, (int *)temporary[TRAINING_OUTPUT1]);
-    not(&predictor_training_input, (int *)temporary[TRAINING_OUTPUT1]);
-    not(&predictor_training_input, (int *)temporary[TRAINING_OUTPUT1]);
+    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training) {
+        not(&predictor_training_input, (int *)temporary[TRAINING_OUTPUT1]);
+    }
     not((int *)temporary[N2], (int *)carry);
 
     memory_fence();

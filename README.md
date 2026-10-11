@@ -6,6 +6,7 @@ Undergraduate's project in micro-architectural attacks and weird gates.
 
 - [Building and running](#building-and-running)
 - [Calibration](#calibration)
+- [Gate delay calibration](#gate-delay-calibration)
 - [Basic operations](#basic-operations)
 - [Testing Mispredictions](#testing-mispredictions)
 - [NOT gate](#not-gate)
@@ -32,79 +33,62 @@ Build and run the complete suite on CPU 0:
 make run-all
 ```
 
-Use targets such as `make run-task3` to run an individual task and
-`make run-calibration` to run calibration. Set `CPU` to select another available
-CPU, for example `make CPU=2 run-all`. The Makefile supplies the required
-optimization and function-layout flags for each program.
+Use targets such as `make run-task3` to run an individual task. Set `CPU` to
+select another available CPU, for example `make CPU=2 run-all`. The Makefile
+supplies the required optimization and function-layout flags for each program.
+Use the Python workflow below for gate-delay calibration.
+
+`make run-all` currently also invokes `calibrate_threshold.out`, a legacy
+diagnostic that prints suggestions without editing the configured constants.
 
 ## Calibration
 
-`calibrate_threshold.c` ramps up the CPU, measures 10,000 cached and 10,000
-flushed loads to estimate `CACHE_HIT_THRESHOLD`, sweeps the NOT delay, and tests
-the configured NAND2 delay for all four input combinations.
-`test()` in `got.c` treats `elapsed < CACHE_HIT_THRESHOLD` as cached.
+Gate-delay calibration uses `calibrate_gate_delays.py` against the actual
+Task 3--6 binaries, keeping the cache-hit threshold fixed. See
+[Gate delay calibration](#gate-delay-calibration) for that workflow.
 
-The NOT sweep calibrates `NOT_MISPREDICTION_DELAY_STEPS`. It tests delays from 0 to
-64 with 1,000 trials per input state and prints the value that gives the best
-accuracy for the weaker of the cached and uncached input cases.
+Current `consts.h` settings are `PREDICTOR_TRAINING_RUNS = 200` and
+`CACHE_HIT_THRESHOLD = 125` ticks, with these gate delays:
 
-NAND2 uses the separate `NAND2_MISPREDICTION_DELAY_STEPS` constant. See below.
+| Gate | Delay steps |
+| --- | ---: |
+| NOT | 1 |
+| NAND | 6 |
+| NAND2 | 1 |
+| FAN2 | 2 |
+| AND | 4 |
+| OR | 1 |
 
-Copy the printed `#define` values into `consts.h`, then recompile and rerun.
+`test()` in `got.c` classifies an access as cached when
+`elapsed < CACHE_HIT_THRESHOLD`.
 
-```bash
-make run-calibration
-```
+The L1/L2/LLC limits in `cache_level_thresholds.h` are calibrated separately with
+the tools described in [Cache-level timing study](#cache-level-timing-study).
 
-Pin calibration and gate experiments to the same available CPU. Recalibrate after
-changing the machine, CPU, timing sequence, or gate code.
+### Gate delay calibration
 
-Example output from a run pinned to CPU 0:
+This is the workflow used for the latest gate-delay calibration.
 
-```text
-=== Cache hit threshold calibration ===
-Cached:  median=60, p95=74 ticks
-Flushed: p05=236, median=304 ticks
-Cache errors: cached=0.12%, flushed=0.00%
-#define CACHE_HIT_THRESHOLD (155)
+`calibrate_gate_delays.py` rebuilds the existing task modules in temporary source
+copies using the Makefile's flags and the current 200-call training configuration.
+It varies one gate's delay, interleaves repeated runs on the selected CPU with
+ASLR disabled, and records binary hashes, assembly, runtime addresses, full
+output, and JSON summaries in `--directory`. Candidates are ranked by their
+weakest input case; FAN2 and NAND2 require both outputs to be correct together.
 
-=== Misprediction delay steps calibration ===
-NOT delay best results (23 steps): accuracy cached=100.00%, uncached=38.80%
-#define NOT_MISPREDICTION_DELAY_STEPS (23)
-
-=== NAND2 delay steps calibration ===
-NAND2 delay results (27 steps): joint accuracy uncached/uncached=91.20%, uncached/cached=89.90%, cached/uncached=90.40%, cached/cached=100.00%
-#define NAND2_MISPREDICTION_DELAY_STEPS (27)
-```
-
-- `median`: middle timing; `p95` and `p05`: 95th and 5th percentiles.
-- `ticks`: timestamp-counter units, including measurement overhead.
-- Threshold: midpoint between cached `p95` and flushed `p05`
-  (`(74 + 236) / 2 = 155` here).
-- Cache errors: percentages of cached samples classified as uncached and flushed
-  samples classified as cached.
-- NOT accuracy: correct outputs for cached and uncached **inputs**. A cached input
-  should leave the output uncached; an uncached input should cache the output.
-If the percentile ranges overlap, the program uses the median midpoint; if the
-medians do not separate, it exits without a threshold.
-
-The NOT sweep always prints its highest-scoring candidate and does not require a
-minimum accuracy. The runtime sweep can differ from compiled `not()`.
-
-### NAND2 Misprediction Delay Calibration
-
-NAND2 uses the separate `NAND2_MISPREDICTION_DELAY_STEPS` constant. Since its
-result is sensitive to compiled code placement, `calibrate_nand2_delay.py`
-rebuilds and runs the actual Task 5 binary for every candidate using temporary
-source copies. This command compares 26--28 with five runs per value on CPU 0:
+For example, compare nearby NAND2 delays with six runs per value:
 
 ```bash
-python3 calibrate_nand2_delay.py --min-steps 26 --max-steps 28 --runs 5 --cpu 0
+make task5.out
+python3 calibrate_gate_delays.py --gate nand2 --steps 0,1,2,4 --runs 6 --cpu 0 --directory /tmp/got-nand2-sweep
 ```
 
-The script prints mean joint accuracy for `UU`, `UC`, `CU`, and `CC`, which
-identify the two input cache states. It selects the delay with the highest
-minimum accuracy among the four states.
+Use a fresh output directory. The script leaves repository constants untouched;
+apply the selected value and rebuild before tuning the next gate. Changes can
+move other gates, so check downstream results as well. Ordinary `make run-all`
+does not disable ASLR, unlike this calibration runner.
+Use the same CPU for calibration and validation, and recheck delays after code
+layout or hardware changes.
 
 ## Basic operations
 
@@ -128,9 +112,10 @@ Uncached: 100.00% success (5021/5021 correct)
 ## Testing Mispredictions
 
 `task2.c` ramps up the CPU with `init()` and runs 10,000 trials each for `branch1`
-and `branch2`. Each trial trains twice with `zero`, flushes `one`, then calls with
-`one` and checks the output's cache state. `branch2` adds a 256-iteration loop to
-make recent branch history more consistent.
+and `branch2`. Each trial trains `PREDICTOR_TRAINING_RUNS` times (currently 200)
+with `zero`, flushes `one`, then calls with `one` and checks the output's cache
+state. `branch2` adds a 256-iteration loop to make recent branch history more
+consistent.
 
 ```bash
 make run-task2
@@ -202,14 +187,14 @@ Inputs (cached, cached), expected output uncached: 99.98% accuracy (24929/24933 
 Cached represents logical 1 and uncached represents logical 0. NAND should
 produce a cached output unless both inputs are cached. Each row shows the
 percentage and count of trials in which `test()` observed that expected state.
-`nand()` retains its separately calibrated `NAND_MISPREDICTION_DELAY_STEPS`
-value of 50; all gate tests use the same compiler and CPU-pinning procedure.
+`nand()` uses
 
 ## NAND2 gate
 
 `nand2()` implements NAND with two output cache lines. `task5.c` runs 100,000
-randomized tests, trains the predictor four times before each measured call, and
-reports results for all four input combinations.
+randomized tests, trains the predictor 200 times before each measured call, and
+reports results for all four input combinations. The count is configured in
+`consts.h`.
 
 ```bash
 make run-task5
@@ -220,7 +205,7 @@ and `Output 2 correct` measure each output separately. `Both correct` is the
 joint gate success rate. `Outputs identical` only measures agreement, so both
 outputs can agree while both are wrong.
 
-Example output with four training calls and the current 27-step delay:
+Example output from the previous four-training-call configuration:
 
 ```text
 Inputs (uncached, uncached), expected outputs cached:
@@ -249,14 +234,17 @@ These rates are sensitive to the delay, predictor training, compiled code
 placement, CPU, and other system activity.
 
 `nand2()` is placed after the other gates and aligned to 128 bytes. The build
-uses `-fno-toplevel-reorder` to preserve that source order. The half adder uses
-two looped NAND2 training calls; the standalone Task 5 tester uses four.
+uses `-fno-toplevel-reorder` to preserve that source order.
 
 ## Additional gates and half adder
 
 `task6.c` separately tests FAN2, AND, OR, and the half adder with 100,000
 randomized trials per test. FAN2 and the half adder report each output as well
 as joint correctness.
+
+The half adder and the NOT, NAND, NAND2, FAN2, AND, and OR gates use the shared
+`PREDICTOR_TRAINING_RUNS` count (currently 200), keeping Tasks 3--7 and gate-delay
+calibration on the same training regime.
 
 ```bash
 make run-task6
@@ -374,7 +362,7 @@ rates show where errors accumulate across the composed circuit.
 
 `cache_level.c` implements `cacheLevel(ptr)` with one serialized load. It
 returns 1 for L1, 2 for L2, 3 for LLC, and 0 for an uncached line. The calibrated
-limits in `cache_level_thresholds.h` are 72, 132, and 240 ticks. The measurement
+limits in `cache_level_thresholds.h` are 44, 81, and 182 ticks. The measurement
 loads the line into L1, so the function cannot repeat the probe or use a
 majority vote.
 
@@ -425,7 +413,7 @@ the current machine. The dependency prevents ordinary hardware prefetching.
 `analyze_cache_levels.py` fits three ordered thresholds on the even-numbered
 prepared samples, choosing the thresholds with the fewest classification
 errors. It evaluates those thresholds on the unused odd-numbered samples. The
-current representative run produced:
+historical example calibration produced:
 
 | Intended state | Median | p95 | Validation accuracy |
 | --- | ---: | ---: | ---: |
@@ -434,9 +422,10 @@ current representative run produced:
 | LLC | 160 ticks | 406 ticks | 80.20% |
 | Uncached | 340 ticks | 652 ticks | 100.00% |
 
-The fitted thresholds classify measurements at most 72 ticks as L1, 73--132
-as L2, 133--240 as LLC, and values above 240 as uncached. Overall validation
-agreement was 92.90%.
+The current configured thresholds classify measurements at most 44 ticks as L1,
+45--81 as L2, 82--182 as LLC, and values above 182 as uncached. The historical
+example calibration above used 72/132/240 and reported 92.90% overall validation
+agreement.
 
 This percentage is agreement with the state the test attempted to prepare, not
 independently verified cache-level accuracy. Loading and flushing give strong
