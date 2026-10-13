@@ -199,6 +199,7 @@ uintptr_t fan2_impl(uintptr_t in,
     double divide_by = wet_run + 1;
     double result = start / divide_by;
 
+    // the condition to be mispredicted.
     if (result == denormal_result) {
         return trash;
     }
@@ -231,7 +232,7 @@ uintptr_t fan2(uintptr_t in, uintptr_t out1, uintptr_t out2,
     _Alignas(64) unsigned char fake_storage[256] = {0};
     uintptr_t fake = (uintptr_t)(fake_storage + 128);
 
-    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training)
+    for (int training = 0; training < FAN2_PREDICTOR_TRAINING_RUNS; ++training)
         trash = fan2_impl(fake, fake, fake, false, trash);
     return fan2_impl(in, out1, out2, true, trash);
 }
@@ -297,7 +298,7 @@ uintptr_t and(uintptr_t input1, uintptr_t input2, uintptr_t output, uintptr_t tr
     _Alignas(64) unsigned char fake_storage[256] = {0};
     uintptr_t fake = (uintptr_t)(fake_storage + 128);
 
-    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training)
+    for (int training = 0; training < AND_PREDICTOR_TRAINING_RUNS; ++training)
         trash = and_gate_impl(fake, fake, fake, false, trash);
     return and_gate_impl(input1, input2, output, true, trash);
 }
@@ -362,7 +363,7 @@ uintptr_t or(uintptr_t input1, uintptr_t input2, uintptr_t output,
     _Alignas(64) unsigned char fake_storage[256] = {0};
     uintptr_t fake = (uintptr_t)(fake_storage + 128);
 
-    for (int training = 0; training < PREDICTOR_TRAINING_RUNS; ++training)
+    for (int training = 0; training < OR_PREDICTOR_TRAINING_RUNS; ++training)
         trash = or_gate_impl(fake, fake, fake, false, trash);
     return or_gate_impl(input1, input2, output, true, trash);
 }

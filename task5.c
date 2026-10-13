@@ -172,6 +172,7 @@ int main(void)
         goto cleanup;
     }
 
+    printf("Running NAND2 gate accuracy test:\n");
     srand((unsigned int)time(NULL));
     init();
 
